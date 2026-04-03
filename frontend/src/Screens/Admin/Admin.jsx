@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { MdOutlineDelete, MdEdit } from "react-icons/md";
 import { IoMdAdd, IoMdClose } from "react-icons/io";
@@ -41,11 +41,7 @@ const Admin = () => {
   const [file, setFile] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
 
-  useEffect(() => {
-    getAdminsHandler();
-  }, []);
-
-  const getAdminsHandler = async () => {
+  const getAdminsHandler = useCallback(async () => {
     try {
       setDataLoading(true);
       const response = await axiosWrapper.get(`/admin`, {
@@ -68,7 +64,11 @@ const Admin = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [userToken]);
+
+  useEffect(() => {
+    getAdminsHandler();
+  }, [getAdminsHandler]);
 
   const addAdminHandler = async () => {
     try {

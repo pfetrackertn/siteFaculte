@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { MdOutlineDelete, MdEdit } from "react-icons/md";
 import { IoMdAdd, IoMdClose } from "react-icons/io";
@@ -7,7 +7,12 @@ import DeleteConfirm from "../../components/DeleteConfirm";
 import axiosWrapper from "../../utils/AxiosWrapper";
 import CustomButton from "../../components/CustomButton";
 import NoData from "../../components/NoData";
+import Loading from "../../components/Loading";
 import { CgDanger } from "react-icons/cg";
+import {
+  formatSemesterLabel,
+  getAcademicClassLabel,
+} from "../../utils/displayText";
 
 const Student = () => {
   const [searchParams, setSearchParams] = useState({
@@ -15,9 +20,11 @@ const Student = () => {
     name: "",
     semester: "",
     branch: "",
+    classId: "",
   });
   const [students, setStudents] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -34,6 +41,7 @@ const Student = () => {
     phone: "",
     semester: "",
     branchId: "",
+    classId: "",
     gender: "",
     dob: "",
     address: "",
@@ -51,11 +59,7 @@ const Student = () => {
     },
   });
 
-  useEffect(() => {
-    getBranchHandler();
-  }, []);
-
-  const getBranchHandler = async () => {
+  const getBranchHandler = useCallback(async () => {
     try {
       toast.loading("Chargement des filieres...");
       const response = await axiosWrapper.get(`/branch`, {
@@ -78,13 +82,80 @@ const Student = () => {
     } finally {
       toast.dismiss();
     }
-  };
+  }, [userToken]);
+
+  useEffect(() => {
+    getBranchHandler();
+  }, [getBranchHandler]);
+
+  const getClassesHandler = useCallback(async () => {
+    try {
+      const response = await axiosWrapper.get(`/class`, {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+      if (response.data.success) {
+        setClasses(response.data.data);
+      } else {
+        toast.error(response.data.message);
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        setClasses([]);
+      } else {
+        toast.error(
+          error.response?.data?.message ||
+            "Erreur lors du chargement des classes"
+        );
+      }
+    }
+  }, [userToken]);
+
+  useEffect(() => {
+    getClassesHandler();
+  }, [getClassesHandler]);
+
+  const filteredSearchClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      if (searchParams.branch && academicClass.branchId?._id !== searchParams.branch) {
+        return false;
+      }
+
+      if (
+        searchParams.semester &&
+        Number(academicClass.semester) !== Number(searchParams.semester)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [classes, searchParams.branch, searchParams.semester]);
+
+  const filteredFormClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      if (formData.branchId && academicClass.branchId?._id !== formData.branchId) {
+        return false;
+      }
+
+      if (
+        formData.semester &&
+        Number(academicClass.semester) !== Number(formData.semester)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [classes, formData.branchId, formData.semester]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setSearchParams((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === "branch" || name === "semester" ? { classId: "" } : {}),
     }));
   };
 
@@ -95,7 +166,8 @@ const Student = () => {
       !searchParams.enrollmentNo &&
       !searchParams.name &&
       !searchParams.semester &&
-      !searchParams.branch
+      !searchParams.branch &&
+      !searchParams.classId
     ) {
       toast.error("Veuillez selectionner au moins un filtre");
       return;
@@ -127,7 +199,12 @@ const Student = () => {
     } catch (error) {
       toast.dismiss();
       setStudents([]);
-      toast.error(error.response?.data?.message || "Erreur lors de la recherche des etudiants");
+      if (error.response?.status !== 404) {
+        toast.error(
+          error.response?.data?.message ||
+            "Erreur lors de la recherche des etudiants"
+        );
+      }
     } finally {
       setDataLoading(false);
     }
@@ -137,6 +214,7 @@ const Student = () => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
+      ...(field === "branchId" || field === "semester" ? { classId: "" } : {}),
     }));
   };
 
@@ -205,6 +283,9 @@ const Student = () => {
           toast.success(response.data.message);
         }
         resetForm();
+        if (hasSearched) {
+          searchStudents({ preventDefault: () => {} });
+        }
       } else {
         toast.error(response.data.message);
       }
@@ -227,6 +308,7 @@ const Student = () => {
       phone: student.phone || "",
       semester: student.semester || "",
       branchId: student.branchId?._id || "",
+      classId: student.classId?._id || "",
       gender: student.gender || "",
       dob: student.dob?.split("T")[0] || "",
       address: student.address || "",
@@ -283,6 +365,7 @@ const Student = () => {
       phone: "",
       semester: "",
       branchId: "",
+      classId: "",
       gender: "",
       dob: "",
       address: "",
@@ -308,18 +391,31 @@ const Student = () => {
   return (
     <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
       <div className="flex justify-between items-center w-full">
-        <Heading title="Gestion des etudiants" />
+        <Heading
+          title="Gestion des etudiants"
+          subtitle="Recherchez les etudiants par filiere, semestre ou classe et gerez leur dossier."
+        />
         {branches.length > 0 && (
-          <CustomButton onClick={() => setShowAddForm(true)}>
+          <CustomButton onClick={() => {
+            resetForm();
+            setShowAddForm(true);
+          }}>
             <IoMdAdd className="text-2xl" />
+            Ajouter
           </CustomButton>
         )}
       </div>
 
+      {dataLoading && !showAddForm && !hasSearched && (
+        <div className="mt-6 w-full">
+          <Loading label="Preparation de l'espace etudiant..." />
+        </div>
+      )}
+
       {branches.length > 0 && (
         <div className="my-6 mx-auto w-full">
           <form onSubmit={searchStudents} className="flex items-center">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-[90%] mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 w-[90%] mx-auto">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Numero d'inscription
@@ -357,7 +453,7 @@ const Student = () => {
                   <option value="">Choisir un semestre</option>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                     <option key={sem} value={sem}>
-                      Semestre {sem}
+                      {formatSemesterLabel(sem)}
                     </option>
                   ))}
                 </select>
@@ -377,6 +473,25 @@ const Student = () => {
                   {branches?.map((branch) => (
                     <option key={branch._id} value={branch._id}>
                       {branch.name}
+                    </option>
+                    ))}
+                  </select>
+                </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Classe
+                </label>
+                <select
+                  name="classId"
+                  value={searchParams.classId}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choisir une classe</option>
+                  {filteredSearchClasses?.map((academicClass) => (
+                    <option key={academicClass._id} value={academicClass._id}>
+                      {getAcademicClassLabel(academicClass)}
                     </option>
                   ))}
                 </select>
@@ -423,6 +538,7 @@ const Student = () => {
                       </th>
                       <th className="px-6 py-3 border-b text-left">Semestre</th>
                       <th className="px-6 py-3 border-b text-left">Filiere</th>
+                      <th className="px-6 py-3 border-b text-left">Classe</th>
                       <th className="px-6 py-3 border-b text-left">E-mail</th>
                       <th className="px-6 py-3 border-b text-center">Actions</th>
                     </tr>
@@ -433,7 +549,11 @@ const Student = () => {
                         <td className="px-6 py-4 border-b">
                           <img
                             src={`${process.env.REACT_APP_MEDIA_LINK}/${student.profile}`}
-                            alt={`Photo de profil de ${student.firstName}`}
+                            alt={
+                              [student.firstName, student.middleName, student.lastName]
+                                .filter(Boolean)
+                                .join(" ") || "Etudiant"
+                            }
                             className="w-12 h-12 object-cover rounded-full"
                             onError={(e) => {
                               e.target.src =
@@ -449,10 +569,13 @@ const Student = () => {
                           {student.enrollmentNo}
                         </td>
                         <td className="px-6 py-4 border-b">
-                          {student.semester}
+                          {formatSemesterLabel(student.semester)}
                         </td>
                         <td className="px-6 py-4 border-b">
                           {student.branchId?.name}
+                        </td>
+                        <td className="px-6 py-4 border-b">
+                          {getAcademicClassLabel(student.classId)}
                         </td>
                         <td className="px-6 py-4 border-b">{student.email}</td>
                         <td className="px-6 py-4 border-b text-center">
@@ -581,7 +704,7 @@ const Student = () => {
                     <option value="">Choisir un semestre</option>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                       <option key={sem} value={sem}>
-                        Semestre {sem}
+                        {formatSemesterLabel(sem)}
                       </option>
                     ))}
                   </select>
@@ -603,6 +726,26 @@ const Student = () => {
                     {branches?.map((branch) => (
                       <option key={branch._id} value={branch._id}>
                         {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Classe
+                  </label>
+                  <select
+                    value={formData.classId}
+                    onChange={(e) =>
+                      handleFormInputChange("classId", e.target.value)
+                    }
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Aucune classe specifique</option>
+                    {filteredFormClasses?.map((academicClass) => (
+                      <option key={academicClass._id} value={academicClass._id}>
+                        {getAcademicClassLabel(academicClass)}
                       </option>
                     ))}
                   </select>

@@ -3,7 +3,7 @@ const ApiResponse = require("../utils/ApiResponse");
 
 const getNoticeController = async (req, res) => {
   try {
-    const notices = await Notice.find();
+    const notices = await Notice.find().sort({ createdAt: -1 });
     if (!notices || notices.length === 0) {
       return ApiResponse.error("Aucune annonce trouvee", 404).send(res);
     }

@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import Heading from "../../components/Heading";
 import axiosWrapper from "../../utils/AxiosWrapper";
 import CustomButton from "../../components/CustomButton";
 import NoData from "../../components/NoData";
-import { formatLongDate, getGenderLabel } from "../../utils/displayText";
+import {
+  formatLongDate,
+  formatSemesterLabel,
+  getAcademicClassLabel,
+  getGenderLabel,
+} from "../../utils/displayText";
 
 const StudentFinder = () => {
   const [searchParams, setSearchParams] = useState({
@@ -12,9 +17,11 @@ const StudentFinder = () => {
     name: "",
     semester: "",
     branch: "",
+    classId: "",
   });
   const [students, setStudents] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -50,16 +57,73 @@ const StudentFinder = () => {
     fetchBranches();
   }, [userToken]);
 
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const response = await axiosWrapper.get("/class", {
+          headers: {
+            Authorization: `Bearer ${userToken}`,
+          },
+        });
+
+        if (response.data.success) {
+          setClasses(response.data.data);
+        }
+      } catch (error) {
+        if (error.response?.status === 404) {
+          setClasses([]);
+          return;
+        }
+
+        toast.error(
+          error.response?.data?.message || "Impossible de charger les classes"
+        );
+      }
+    };
+
+    fetchClasses();
+  }, [userToken]);
+
+  const filteredClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      if (searchParams.branch && academicClass.branchId?._id !== searchParams.branch) {
+        return false;
+      }
+
+      if (
+        searchParams.semester &&
+        Number(academicClass.semester) !== Number(searchParams.semester)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [classes, searchParams.branch, searchParams.semester]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setSearchParams((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === "branch" || name === "semester" ? { classId: "" } : {}),
     }));
   };
 
   const searchStudents = async (e) => {
     e.preventDefault();
+
+    if (
+      !searchParams.enrollmentNo &&
+      !searchParams.name &&
+      !searchParams.semester &&
+      !searchParams.branch &&
+      !searchParams.classId
+    ) {
+      toast.error("Veuillez selectionner au moins un filtre");
+      return;
+    }
+
     setDataLoading(true);
     setHasSearched(true);
     toast.loading("Recherche des etudiants...");
@@ -87,7 +151,12 @@ const StudentFinder = () => {
       }
     } catch (error) {
       toast.dismiss();
-      toast.error(error.response?.data?.message || "Erreur lors de la recherche des etudiants");
+      if (error.response?.status !== 404) {
+        toast.error(
+          error.response?.data?.message ||
+            "Erreur lors de la recherche des etudiants"
+        );
+      }
       console.error("Erreur de recherche :", error);
     } finally {
       setDataLoading(false);
@@ -102,12 +171,15 @@ const StudentFinder = () => {
   return (
     <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
       <div className="flex justify-between items-center w-full">
-        <Heading title="Recherche d'etudiants" />
+        <Heading
+          title="Recherche d'etudiants"
+          subtitle="Retrouvez rapidement un etudiant par filiere, semestre ou classe."
+        />
       </div>
 
       <div className="my-6 mx-auto w-full">
         <form onSubmit={searchStudents} className="flex items-center">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-[90%] mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 w-[90%] mx-auto">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Numero d'inscription
@@ -145,7 +217,7 @@ const StudentFinder = () => {
                 <option value="">Choisir un semestre</option>
                 {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                   <option key={sem} value={sem}>
-                    Semestre {sem}
+                    {formatSemesterLabel(sem)}
                   </option>
                 ))}
               </select>
@@ -162,14 +234,33 @@ const StudentFinder = () => {
                 className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Choisir une filiere</option>
-                {branches?.map((branch) => (
-                  <option key={branch._id} value={branch._id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
+                  {branches?.map((branch) => (
+                    <option key={branch._id} value={branch._id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Classe
+                </label>
+                <select
+                  name="classId"
+                  value={searchParams.classId}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choisir une classe</option>
+                  {filteredClasses.map((academicClass) => (
+                    <option key={academicClass._id} value={academicClass._id}>
+                      {getAcademicClassLabel(academicClass)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
 
           <div className="mt-6 flex justify-center w-[10%] mx-auto">
             <CustomButton
@@ -207,10 +298,11 @@ const StudentFinder = () => {
                     <th className="px-6 py-3 border-b text-left">Profil</th>
                     <th className="px-6 py-3 border-b text-left">Nom</th>
                     <th className="px-6 py-3 border-b text-left">
-                      N° inscription
+                      No inscription
                     </th>
                     <th className="px-6 py-3 border-b text-left">Semestre</th>
                     <th className="px-6 py-3 border-b text-left">Filiere</th>
+                    <th className="px-6 py-3 border-b text-left">Classe</th>
                     <th className="px-6 py-3 border-b text-left">E-mail</th>
                   </tr>
                 </thead>
@@ -224,7 +316,11 @@ const StudentFinder = () => {
                       <td className="px-6 py-4 border-b">
                         <img
                           src={`${process.env.REACT_APP_MEDIA_LINK}/${student.profile}`}
-                          alt={`Photo de profil de ${student.firstName}`}
+                          alt={
+                            [student.firstName, student.middleName, student.lastName]
+                              .filter(Boolean)
+                              .join(" ") || "Etudiant"
+                          }
                           className="w-12 h-12 object-cover rounded-full"
                           onError={(e) => {
                             e.target.src =
@@ -239,9 +335,14 @@ const StudentFinder = () => {
                       <td className="px-6 py-4 border-b">
                         {student.enrollmentNo}
                       </td>
-                      <td className="px-6 py-4 border-b">{student.semester}</td>
+                      <td className="px-6 py-4 border-b">
+                        {formatSemesterLabel(student.semester)}
+                      </td>
                       <td className="px-6 py-4 border-b">
                         {student.branchId?.name}
+                      </td>
+                      <td className="px-6 py-4 border-b">
+                        {getAcademicClassLabel(student.classId)}
                       </td>
                       <td className="px-6 py-4 border-b">{student.email}</td>
                     </tr>
@@ -281,7 +382,15 @@ const StudentFinder = () => {
                 <div className="w-full md:w-1/3">
                   <img
                     src={`${process.env.REACT_APP_MEDIA_LINK}/${selectedStudent.profile}`}
-                    alt={`Photo de profil de ${selectedStudent.firstName}`}
+                    alt={
+                      [
+                        selectedStudent.firstName,
+                        selectedStudent.middleName,
+                        selectedStudent.lastName,
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || "Etudiant"
+                    }
                     className="w-full h-auto object-cover rounded-lg"
                     onError={(e) => {
                       e.target.src =
@@ -323,7 +432,7 @@ const StudentFinder = () => {
                   </h3>
                   <div className="space-y-2">
                     <p>
-                      <span className="font-medium">N° inscription :</span>{" "}
+                      <span className="font-medium">No inscription :</span>{" "}
                       {selectedStudent.enrollmentNo}
                     </p>
                     <p>
@@ -332,7 +441,11 @@ const StudentFinder = () => {
                     </p>
                     <p>
                       <span className="font-medium">Semestre :</span>{" "}
-                      {selectedStudent.semester}
+                      {formatSemesterLabel(selectedStudent.semester)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Classe :</span>{" "}
+                      {getAcademicClassLabel(selectedStudent.classId)}
                     </p>
                   </div>
                 </div>

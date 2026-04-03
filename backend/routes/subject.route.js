@@ -10,6 +10,7 @@ const auth = require("../middlewares/auth.middleware");
 router.get("/", auth, getSubjectController);
 router.post("/", auth, addSubjectController);
 router.delete("/:id", auth, deleteSubjectController);
+router.patch("/:id", auth, updateSubjectController);
 router.put("/:id", auth, updateSubjectController);
 
 module.exports = router;

@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { IoMdLink, IoMdAdd, IoMdClose } from "react-icons/io";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { IoMdAdd, IoMdClose, IoMdLink } from "react-icons/io";
 import { HiOutlineCalendar } from "react-icons/hi";
-import { useLocation, useNavigate } from "react-router-dom";
 import { MdDeleteOutline, MdEditNote } from "react-icons/md";
+import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import Heading from "../components/Heading";
-import axiosWrapper from "../utils/AxiosWrapper";
 import CustomButton from "../components/CustomButton";
 import DeleteConfirm from "../components/DeleteConfirm";
+import Heading from "../components/Heading";
 import Loading from "../components/Loading";
+import NoData from "../components/NoData";
+import axiosWrapper from "../utils/AxiosWrapper";
 import { getNoticeAudienceLabel } from "../utils/displayText";
 
 const Notice = () => {
@@ -21,6 +22,9 @@ const Notice = () => {
   const [selectedNoticeId, setSelectedNoticeId] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
   const token = localStorage.getItem("userToken");
+  const currentUserType = (localStorage.getItem("userType") || "").toLowerCase();
+  const canManageNotices =
+    router.pathname === "/faculty" || router.pathname === "/admin";
 
   const [formData, setFormData] = useState({
     title: "",
@@ -36,7 +40,7 @@ const Notice = () => {
     }
   }, [token, navigate]);
 
-  const getNotices = async () => {
+  const getNotices = useCallback(async () => {
     try {
       setDataLoading(true);
       const response = await axiosWrapper.get("/notice", {
@@ -60,11 +64,21 @@ const Notice = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     getNotices();
-  }, [router.pathname]);
+  }, [getNotices]);
+
+  const visibleNotices = useMemo(() => {
+    if (currentUserType === "admin") {
+      return notices;
+    }
+
+    return notices.filter(
+      (notice) => notice.type === "both" || notice.type === currentUserType
+    );
+  }, [currentUserType, notices]);
 
   const openAddModal = () => {
     setEditingNotice(null);
@@ -116,7 +130,7 @@ const Notice = () => {
       toast.dismiss();
       if (response.data.success) {
         toast.success(response.data.message);
-        getNotices();
+        await getNotices();
         setShowAddModal(false);
         setEditingNotice(null);
       } else {
@@ -142,7 +156,7 @@ const Notice = () => {
       if (response.data.success) {
         toast.success("Annonce supprimee avec succes");
         setIsDeleteConfirmOpen(false);
-        getNotices();
+        await getNotices();
       } else {
         toast.error(response.data.message);
       }
@@ -155,121 +169,135 @@ const Notice = () => {
   };
 
   return (
-    <div className="w-full mx-auto flex justify-center items-start flex-col my-10">
-      <div className="relative flex justify-between items-center w-full">
-        <Heading title="Annonces" />
-        {!dataLoading &&
-          (router.pathname === "/faculty" || router.pathname === "/admin") && (
-            <CustomButton onClick={openAddModal}>
-              <IoMdAdd className="text-2xl" />
-            </CustomButton>
-          )}
+    <div className="w-full px-2 py-6 sm:px-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <Heading
+          title="Annonces"
+          subtitle="Consultez ou publiez les communications importantes de l'etablissement."
+        />
+        {canManageNotices && !dataLoading && (
+          <CustomButton onClick={openAddModal} className="self-start sm:self-auto">
+            <IoMdAdd className="text-xl" />
+            Nouvelle annonce
+          </CustomButton>
+        )}
       </div>
 
-      {dataLoading && <Loading />}
-
-      {!dataLoading && (
+      {dataLoading ? (
         <div className="mt-8">
-          {notices.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              Aucune annonce disponible
-            </div>
-          ) : (
-            <div className="mt-8 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {notices?.map((notice) => (
-                <div
-                  key={notice._id}
-                  className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-gray-100 w-[350px]"
-                >
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <h3
-                        className={`text-lg font-semibold line-clamp-2 group flex items-start ${
-                          notice.link
-                            ? "cursor-pointer hover:text-blue-600"
-                            : ""
-                        }`}
-                        onClick={() => notice.link && window.open(notice.link)}
-                      >
-                        {notice.title}
-                        {notice.link && (
-                          <IoMdLink className="ml-2 flex-shrink-0 text-xl opacity-70 group-hover:opacity-100 group-hover:text-blue-500" />
-                        )}
-                      </h3>
-                      {(router.pathname === "/faculty" ||
-                        router.pathname === "/admin") && (
-                        <div className="flex gap-2 ml-2 flex-shrink-0">
-                          <CustomButton
-                            onClick={() => {
-                              setSelectedNoticeId(notice._id);
-                              setIsDeleteConfirmOpen(true);
-                            }}
-                            variant="danger"
-                            className="!p-1.5 rounded-full"
-                            title="Supprimer l'annonce"
-                          >
-                            <MdDeleteOutline size={18} />
-                          </CustomButton>
-                          <CustomButton
-                            onClick={() => handleEdit(notice)}
-                            variant="secondary"
-                            className="!p-1.5 rounded-full"
-                            title="Modifier l'annonce"
-                          >
-                            <MdEditNote size={18} />
-                          </CustomButton>
-                        </div>
-                      )}
-                    </div>
-
-                    <p className="text-gray-600 text-sm line-clamp-3 mb-4">
-                      {notice.description}
-                    </p>
-
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <div className="flex items-center">
-                        <HiOutlineCalendar className="mr-1" />
-                        {new Date(notice.createdAt).toLocaleString("fr-FR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                        })}
-                      </div>
-                      <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-medium">
-                        {getNoticeAudienceLabel(notice.type)}
-                      </span>
-                    </div>
-                  </div>
+          <Loading label="Chargement des annonces..." />
+        </div>
+      ) : visibleNotices.length === 0 ? (
+        <NoData
+          title="Aucune annonce disponible"
+          description="Les nouvelles annonces apparaitront ici des qu'elles seront publiees."
+        />
+      ) : (
+        <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {visibleNotices.map((notice) => (
+            <article
+              key={notice._id}
+              className="group flex h-full flex-col rounded-[28px] border border-slate-200/80 bg-white/95 p-6 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.35)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_60px_-34px_rgba(37,99,235,0.35)]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-3">
+                  <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
+                    {getNoticeAudienceLabel(notice.type)}
+                  </span>
+                  <button
+                    className={`flex items-start gap-2 text-left text-xl font-bold leading-snug text-slate-900 transition ${
+                      notice.link ? "hover:text-blue-600" : ""
+                    }`}
+                    onClick={() =>
+                      notice.link && window.open(notice.link, "_blank")
+                    }
+                  >
+                    <span>{notice.title}</span>
+                    {notice.link && (
+                      <IoMdLink className="mt-1 flex-shrink-0 text-lg text-blue-500" />
+                    )}
+                  </button>
                 </div>
-              ))}
-            </div>
-          )}
+
+                {canManageNotices && (
+                  <div className="flex gap-2">
+                    <CustomButton
+                      onClick={() => {
+                        setSelectedNoticeId(notice._id);
+                        setIsDeleteConfirmOpen(true);
+                      }}
+                      variant="danger"
+                      className="!rounded-xl !p-2.5"
+                      title="Supprimer l'annonce"
+                    >
+                      <MdDeleteOutline size={18} />
+                    </CustomButton>
+                    <CustomButton
+                      onClick={() => handleEdit(notice)}
+                      variant="secondary"
+                      className="!rounded-xl !p-2.5"
+                      title="Modifier l'annonce"
+                    >
+                      <MdEditNote size={18} />
+                    </CustomButton>
+                  </div>
+                )}
+              </div>
+
+              <p className="mt-5 flex-1 text-sm leading-7 text-slate-600">
+                {notice.description}
+              </p>
+
+              <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-100 pt-5 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <HiOutlineCalendar className="text-sm text-blue-500" />
+                  <span>
+                    {new Date(notice.createdAt).toLocaleDateString("fr-FR", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                {notice.link ? (
+                  <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">
+                    Lien disponible
+                  </span>
+                ) : null}
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-lg w-[500px] max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold">
-                {editingNotice
-                  ? "Modifier l'annonce"
-                  : "Ajouter une annonce"}
-              </h2>
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200/80 px-6 py-5 sm:px-8">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  {editingNotice
+                    ? "Modifier l'annonce"
+                    : "Ajouter une annonce"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Redigez une annonce claire et ciblee pour le bon public.
+                </p>
+              </div>
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setEditingNotice(null);
                 }}
-                className="text-gray-500 hover:text-gray-700"
+                className="rounded-2xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               >
                 <IoMdClose className="text-3xl" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitNotice} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitNotice} className="space-y-5 px-6 py-6 sm:px-8">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Titre de l'annonce
                 </label>
                 <input
@@ -278,57 +306,58 @@ const Notice = () => {
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex. Report de l'examen du semestre 4"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Description de l'annonce
                 </label>
                 <textarea
-                  rows="4"
+                  rows="5"
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Precisez ici les informations essentielles."
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Lien de l'annonce (optionnel)
-                </label>
-                <input
-                  type="text"
-                  value={formData.link}
-                  onChange={(e) =>
-                    setFormData({ ...formData, link: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Public concerne
+                  </label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) =>
+                      setFormData({ ...formData, type: e.target.value })
+                    }
+                  >
+                    <option value="">Choisir le type</option>
+                    <option value="student">Etudiants</option>
+                    <option value="faculty">Enseignants</option>
+                    <option value="both">Tous</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Lien associe (optionnel)
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.link}
+                    onChange={(e) =>
+                      setFormData({ ...formData, link: e.target.value })
+                    }
+                    placeholder="https://..."
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Public concerne
-                </label>
-                <select
-                  value={formData.type}
-                  onChange={(e) =>
-                    setFormData({ ...formData, type: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Choisir le type</option>
-                  <option value="student">Etudiants</option>
-                  <option value="faculty">Enseignants</option>
-                  <option value="both">Tous</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-4 pt-4 border-t">
+              <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-5">
                 <CustomButton
                   variant="secondary"
                   onClick={() => {
@@ -338,8 +367,8 @@ const Notice = () => {
                 >
                   Annuler
                 </CustomButton>
-                <CustomButton type="submit" variant="primary">
-                  {editingNotice ? "Modifier" : "Ajouter"}
+                <CustomButton type="submit">
+                  {editingNotice ? "Enregistrer" : "Publier"}
                 </CustomButton>
               </div>
             </form>

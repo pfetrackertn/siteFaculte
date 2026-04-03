@@ -29,6 +29,11 @@ const Material = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    classId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicClass",
+      default: null,
+    },
     type: {
       type: String,
       enum: ["notes", "assignment", "syllabus", "other"],

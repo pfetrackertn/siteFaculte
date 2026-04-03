@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { MdOutlineDelete, MdEdit } from "react-icons/md";
 import { IoMdAdd, IoMdClose } from "react-icons/io";
@@ -19,13 +19,7 @@ const Branch = () => {
   const [selectedBranchId, setSelectedBranchId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
-  const [processLoading, setProcessLoading] = useState(false);
-
-  useEffect(() => {
-    getBranchHandler();
-  }, []);
-
-  const getBranchHandler = async () => {
+  const getBranchHandler = useCallback(async () => {
     setDataLoading(true);
     try {
       const response = await axiosWrapper.get(`/branch`, {
@@ -49,7 +43,11 @@ const Branch = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    getBranchHandler();
+  }, [getBranchHandler]);
 
   const addBranchHandler = async () => {
     if (!data.name || !data.branchId) {

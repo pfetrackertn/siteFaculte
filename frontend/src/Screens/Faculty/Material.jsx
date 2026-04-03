@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FiUpload, FiEdit2, FiTrash2 } from "react-icons/fi";
 import Heading from "../../components/Heading";
 import { AiOutlineClose } from "react-icons/ai";
@@ -9,11 +8,16 @@ import DeleteConfirm from "../../components/DeleteConfirm";
 import CustomButton from "../../components/CustomButton";
 import { MdLink } from "react-icons/md";
 import { IoMdAdd } from "react-icons/io";
-import { getMaterialTypeLabel } from "../../utils/displayText";
+import {
+  formatSemesterLabel,
+  getAcademicClassLabel,
+  getMaterialTypeLabel,
+} from "../../utils/displayText";
 const Material = () => {
   const [materials, setMaterials] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState(null);
@@ -24,6 +28,7 @@ const Material = () => {
     subject: "",
     semester: "",
     branch: "",
+    classId: "",
     type: "notes",
   });
   const [file, setFile] = useState(null);
@@ -31,27 +36,18 @@ const Material = () => {
     subject: "",
     semester: "",
     branch: "",
+    classId: "",
     type: "",
   });
-  const [error, setError] = useState(null);
+  const userToken = localStorage.getItem("userToken");
 
-  useEffect(() => {
-    fetchSubjects();
-    fetchBranches();
-    fetchMaterials();
-  }, []);
-
-  useEffect(() => {
-    fetchMaterials();
-  }, [filters]);
-
-  const fetchSubjects = async () => {
+  const fetchSubjects = useCallback(async () => {
     try {
       toast.loading("Chargement des matieres...");
       const response = await axiosWrapper.get("/subject", {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("userToken")}`,
+          Authorization: `Bearer ${userToken}`,
         },
       });
       if (response.data.success) {
@@ -68,15 +64,15 @@ const Material = () => {
     } finally {
       toast.dismiss();
     }
-  };
+  }, [userToken]);
 
-  const fetchBranches = async () => {
+  const fetchBranches = useCallback(async () => {
     try {
       toast.loading("Chargement des filieres...");
       const response = await axiosWrapper.get("/branch", {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("userToken")}`,
+          Authorization: `Bearer ${userToken}`,
         },
       });
       if (response.data.success) {
@@ -93,9 +89,31 @@ const Material = () => {
     } finally {
       toast.dismiss();
     }
-  };
+  }, [userToken]);
 
-  const fetchMaterials = async () => {
+  const fetchClasses = useCallback(async () => {
+    try {
+      const response = await axiosWrapper.get("/class", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+      if (response.data.success) {
+        setClasses(response.data.data);
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        setClasses([]);
+      } else {
+        toast.error(
+          error?.response?.data?.message || "Impossible de charger les classes"
+        );
+      }
+    }
+  }, [userToken]);
+
+  const fetchMaterials = useCallback(async () => {
     try {
       toast.loading("Chargement des ressources...");
       const queryParams = new URLSearchParams();
@@ -106,7 +124,7 @@ const Material = () => {
       const response = await axiosWrapper.get(`/material?${queryParams}`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("userToken")}`,
+          Authorization: `Bearer ${userToken}`,
         },
       });
       if (response.data.success) {
@@ -123,13 +141,58 @@ const Material = () => {
     } finally {
       toast.dismiss();
     }
-  };
+  }, [filters, userToken]);
+
+  useEffect(() => {
+    fetchSubjects();
+    fetchBranches();
+    fetchClasses();
+  }, [fetchBranches, fetchClasses, fetchSubjects]);
+
+  const filteredFormClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      if (formData.branch && academicClass.branchId?._id !== formData.branch) {
+        return false;
+      }
+
+      if (
+        formData.semester &&
+        Number(academicClass.semester) !== Number(formData.semester)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [classes, formData.branch, formData.semester]);
+
+  const filteredClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      if (filters.branch && academicClass.branchId?._id !== filters.branch) {
+        return false;
+      }
+
+      if (
+        filters.semester &&
+        Number(academicClass.semester) !== Number(filters.semester)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [classes, filters.branch, filters.semester]);
+
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === "branch" || name === "semester" ? { classId: "" } : {}),
     }));
   };
 
@@ -138,6 +201,7 @@ const Material = () => {
     setFilters((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === "branch" || name === "semester" ? { classId: "" } : {}),
     }));
   };
 
@@ -151,6 +215,7 @@ const Material = () => {
       subject: "",
       semester: "",
       branch: "",
+      classId: "",
       type: "notes",
     });
     setFile(null);
@@ -176,16 +241,18 @@ const Material = () => {
       }
 
       if (editingMaterial) {
-        await axiosWrapper.put(
-          `/material/${editingMaterial._id}`,
-          formDataToSend
-        );
+        await axiosWrapper.put(`/material/${editingMaterial._id}`, formDataToSend, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${userToken}`,
+          },
+        });
         toast.success("Ressource mise a jour avec succes");
       } else {
         await axiosWrapper.post("/material", formDataToSend, {
           headers: {
             "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${localStorage.getItem("userToken")}`,
+            Authorization: `Bearer ${userToken}`,
           },
         });
         toast.success("Ressource ajoutee avec succes");
@@ -209,6 +276,7 @@ const Material = () => {
       subject: material.subject._id,
       semester: material.semester,
       branch: material.branch._id,
+      classId: material.classId?._id || "",
       type: material.type,
     });
     setShowModal(true);
@@ -219,7 +287,7 @@ const Material = () => {
       await axiosWrapper.delete(`/material/${selectedMaterialId}`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("userToken")}`,
+          Authorization: `Bearer ${userToken}`,
         },
       });
       toast.success("Ressource supprimee avec succes");
@@ -244,7 +312,7 @@ const Material = () => {
 
       {/* Filters */}
       <div className="w-full mt-4">
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
               Filtrer par matiere
@@ -296,7 +364,26 @@ const Material = () => {
               <option value="">Tous les semestres</option>
               {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                 <option key={sem} value={sem}>
-                  Semestre {sem}
+                  {formatSemesterLabel(sem)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+              Filtrer par classe
+              </label>
+            <select
+              name="classId"
+              value={filters.classId}
+              onChange={handleFilterChange}
+              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Toutes les classes</option>
+              {filteredClasses.map((academicClass) => (
+                <option key={academicClass._id} value={academicClass._id}>
+                  {getAcademicClassLabel(academicClass)}
                 </option>
               ))}
             </select>
@@ -337,6 +424,7 @@ const Material = () => {
                 <th className="py-4 px-6 text-left font-semibold">Matiere</th>
                 <th className="py-4 px-6 text-left font-semibold">Semestre</th>
                 <th className="py-4 px-6 text-left font-semibold">Filiere</th>
+                <th className="py-4 px-6 text-left font-semibold">Classe</th>
                 <th className="py-4 px-6 text-left font-semibold">Type</th>
                 <th className="py-4 px-6 text-left font-semibold">Actions</th>
               </tr>
@@ -358,8 +446,13 @@ const Material = () => {
                   </td>
                   <td className="py-4 px-6">{material.title}</td>
                   <td className="py-4 px-6">{material.subject.name}</td>
-                  <td className="py-4 px-6">{material.semester}</td>
+                  <td className="py-4 px-6">{formatSemesterLabel(material.semester)}</td>
                   <td className="py-4 px-6">{material.branch.name}</td>
+                  <td className="py-4 px-6">
+                    {material.classId
+                      ? getAcademicClassLabel(material.classId)
+                      : "Generale"}
+                  </td>
                   <td className="py-4 px-6">{getMaterialTypeLabel(material.type)}</td>
                   <td className="py-4 px-6">
                     <div className="flex gap-4">
@@ -474,7 +567,26 @@ const Material = () => {
                     <option value="">Choisir un semestre</option>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                       <option key={sem} value={sem}>
-                        Semestre {sem}
+                        {formatSemesterLabel(sem)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Classe
+                  </label>
+                  <select
+                    name="classId"
+                    value={formData.classId}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Aucune classe specifique</option>
+                    {filteredFormClasses.map((academicClass) => (
+                      <option key={academicClass._id} value={academicClass._id}>
+                        {getAcademicClassLabel(academicClass)}
                       </option>
                     ))}
                   </select>

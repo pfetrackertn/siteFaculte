@@ -1,6 +1,6 @@
 import React from "react";
 import Login from "./Screens/Login";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { Provider } from "react-redux";
 import mystore from "./redux/store";
 import StudentHome from "./Screens/Student/Home";
@@ -24,6 +24,7 @@ const App = () => {
             <Route path="student" element={<StudentHome />} />
             <Route path="faculty" element={<FacultyHome />} />
             <Route path="admin" element={<AdminHome />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
       </Provider>

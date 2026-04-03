@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const marksSchema = new mongoose.Schema({
   studentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "StudentDetails",
+    ref: "StudentDetail",
     required: true,
   },
   subjectId: {
@@ -25,5 +25,10 @@ const marksSchema = new mongoose.Schema({
     required: true,
   },
 });
+
+marksSchema.index(
+  { studentId: 1, subjectId: 1, examId: 1, semester: 1 },
+  { unique: true }
+);
 
 module.exports = mongoose.model("Marks", marksSchema);

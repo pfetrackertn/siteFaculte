@@ -1,18 +1,20 @@
-const connectToMongo = require("./database/db");
+require("dotenv").config();
+const connectToMongo = require("./Database/db");
 const express = require("express");
 const app = express();
 const path = require("path");
 connectToMongo();
-const port = 4000 || process.env.PORT;
-var cors = require("cors");
+const port = process.env.PORT || 4000;
+const cors = require("cors");
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_API_LINK,
+    origin: process.env.FRONTEND_API_LINK || "http://localhost:3000",
   })
 );
 
 app.use(express.json()); //to convert request data to json
+app.use(express.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
   res.send("Hello 👋 I am Working Fine 🚀");
@@ -25,6 +27,7 @@ app.use("/api/faculty", require("./routes/details/faculty-details.route"));
 app.use("/api/student", require("./routes/details/student-details.route"));
 
 app.use("/api/branch", require("./routes/branch.route"));
+app.use("/api/class", require("./routes/class.route"));
 app.use("/api/subject", require("./routes/subject.route"));
 app.use("/api/notice", require("./routes/notice.route"));
 app.use("/api/timetable", require("./routes/timetable.route"));

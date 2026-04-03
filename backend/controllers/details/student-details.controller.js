@@ -1,9 +1,75 @@
 const studentDetails = require("../../models/details/student-details.model");
 const resetToken = require("../../models/reset-password.model");
+const AcademicClass = require("../../models/class.model");
 const bcrypt = require("bcryptjs");
 const ApiResponse = require("../../utils/ApiResponse");
 const jwt = require("jsonwebtoken");
 const sendResetMail = require("../../utils/SendMail");
+
+const applyStudentPopulate = (query) =>
+  query
+    .populate("branchId", "name branchId")
+    .populate({
+      path: "classId",
+      select: "name code semester branchId status",
+      populate: {
+        path: "branchId",
+        select: "name branchId",
+      },
+    });
+
+const normalizeClassId = (classId) => {
+  if (!classId || classId === "null" || classId === "undefined") {
+    return null;
+  }
+
+  return classId;
+};
+
+const ensureClassMatchesAcademicContext = async ({
+  classId,
+  branchId,
+  semester,
+}) => {
+  if (!classId) {
+    return { academicClass: null };
+  }
+
+  const academicClass = await AcademicClass.findById(classId);
+
+  if (!academicClass) {
+    return { error: "Classe introuvable" };
+  }
+
+  if (
+    branchId &&
+    academicClass.branchId.toString() !== branchId.toString()
+  ) {
+    return {
+      error: "La classe selectionnee ne correspond pas a la filiere choisie",
+    };
+  }
+
+  if (semester && Number(academicClass.semester) !== Number(semester)) {
+    return {
+      error: "La classe selectionnee ne correspond pas au semestre choisi",
+    };
+  }
+
+  return { academicClass };
+};
+
+const generateEnrollmentNo = async () => {
+  let enrollmentNo;
+  let exists = true;
+
+  while (exists) {
+    enrollmentNo = Math.floor(100000 + Math.random() * 900000);
+    exists = await studentDetails.exists({ enrollmentNo });
+  }
+
+  return enrollmentNo;
+};
 
 const loginStudentController = async (req, res) => {
   try {
@@ -34,10 +100,9 @@ const loginStudentController = async (req, res) => {
 
 const getAllDetailsController = async (req, res) => {
   try {
-    const users = await studentDetails
-      .find()
-      .select("-__v -password")
-      .populate("branchId");
+    const users = await applyStudentPopulate(
+      studentDetails.find().select("-__v -password")
+    );
 
     if (!users || users.length === 0) {
       return ApiResponse.notFound("Aucun etudiant trouve").send(res);
@@ -54,22 +119,33 @@ const getAllDetailsController = async (req, res) => {
 
 const registerStudentController = async (req, res) => {
   try {
-    const profile = req.file.filename;
+    const profile = req.file?.filename || "";
+    const normalizedClassId = normalizeClassId(req.body.classId);
+    const classValidation = await ensureClassMatchesAcademicContext({
+      classId: normalizedClassId,
+      branchId: req.body.branchId,
+      semester: req.body.semester,
+    });
 
-    const enrollmentNo = Math.floor(100000 + Math.random() * 900000);
+    if (classValidation.error) {
+      return ApiResponse.badRequest(classValidation.error).send(res);
+    }
+
+    const enrollmentNo = await generateEnrollmentNo();
     const email = `${enrollmentNo}@gmail.com`;
 
     const user = await studentDetails.create({
       ...req.body,
+      classId: normalizedClassId,
       profile,
       password: "student123",
       email,
       enrollmentNo,
     });
 
-    const sanitizedUser = await studentDetails
-      .findById(user._id)
-      .select("-__v -password");
+    const sanitizedUser = await applyStudentPopulate(
+      studentDetails.findById(user._id).select("-__v -password")
+    );
 
     return ApiResponse.created(sanitizedUser, "Etudiant ajoute avec succes").send(
       res
@@ -82,10 +158,9 @@ const registerStudentController = async (req, res) => {
 
 const getMyDetailsController = async (req, res) => {
   try {
-    const user = await studentDetails
-      .findById(req.userId)
-      .select("-password -__v")
-      .populate("branchId");
+    const user = await applyStudentPopulate(
+      studentDetails.findById(req.userId).select("-password -__v")
+    );
 
     if (!user) {
       return ApiResponse.notFound("Utilisateur introuvable").send(res);
@@ -105,6 +180,12 @@ const updateDetailsController = async (req, res) => {
     if (!req.params.id) {
       return ApiResponse.badRequest("L'identifiant de l'etudiant est requis")
         .send(res);
+    }
+
+    const currentUser = await studentDetails.findById(req.params.id);
+
+    if (!currentUser) {
+      return ApiResponse.notFound("Etudiant introuvable").send(res);
     }
 
     const updateData = { ...req.body };
@@ -172,6 +253,30 @@ const updateDetailsController = async (req, res) => {
       updateData.profile = req.file.filename;
     }
 
+    if (Object.prototype.hasOwnProperty.call(updateData, "classId")) {
+      updateData.classId = normalizeClassId(updateData.classId);
+    }
+
+    const classIdToValidate = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "classId"
+    )
+      ? updateData.classId
+      : currentUser.classId;
+
+    const branchIdToValidate = updateData.branchId || currentUser.branchId;
+    const semesterToValidate = updateData.semester || currentUser.semester;
+
+    const classValidation = await ensureClassMatchesAcademicContext({
+      classId: classIdToValidate,
+      branchId: branchIdToValidate,
+      semester: semesterToValidate,
+    });
+
+    if (classValidation.error) {
+      return ApiResponse.badRequest(classValidation.error).send(res);
+    }
+
     if (updateData.dob) {
       updateData.dob = new Date(updateData.dob);
     }
@@ -179,13 +284,11 @@ const updateDetailsController = async (req, res) => {
       updateData.joiningDate = new Date(updateData.joiningDate);
     }
 
-    const updatedUser = await studentDetails
-      .findByIdAndUpdate(req.params.id, updateData, { new: true })
-      .select("-__v -password");
-
-    if (!updatedUser) {
-      return ApiResponse.notFound("Etudiant introuvable").send(res);
-    }
+    const updatedUser = await applyStudentPopulate(
+      studentDetails
+        .findByIdAndUpdate(req.params.id, updateData, { new: true })
+        .select("-__v -password")
+    );
 
     return ApiResponse.success(
       updatedUser,
@@ -312,10 +415,10 @@ const updatePasswordHandler = async (req, res) => {
 
 const searchStudentsController = async (req, res) => {
   try {
-    const { enrollmentNo, name, semester, branch } = req.body;
+    const { enrollmentNo, name, semester, branch, classId } = req.body;
     let query = {};
 
-    if (!enrollmentNo && !name && !semester && !branch) {
+    if (!enrollmentNo && !name && !semester && !branch && !classId) {
       return ApiResponse.badRequest(
         "Veuillez selectionner au moins un filtre"
       ).send(res);
@@ -341,11 +444,16 @@ const searchStudentsController = async (req, res) => {
       query.branchId = branch;
     }
 
-    const students = await studentDetails
-      .find(query)
-      .select("-password -__v")
-      .populate("branchId")
-      .sort({ enrollmentNo: 1 });
+    if (classId) {
+      query.classId = classId;
+    }
+
+    const students = await applyStudentPopulate(
+      studentDetails
+        .find(query)
+        .select("-password -__v")
+        .sort({ enrollmentNo: 1 })
+    );
 
     if (!students || students.length === 0) {
       return ApiResponse.notFound("Aucun etudiant trouve").send(res);

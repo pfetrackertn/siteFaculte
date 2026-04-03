@@ -1,14 +1,65 @@
-* {
-  padding: 0;
-  margin: 0;
-  box-sizing: border-box;
-  font-family: "Poppins", sans-serif;
-}
-@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@100;200;300;400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --app-bg: #f5f7fb;
+  --app-ink: #0f172a;
+  --app-muted: #64748b;
+  --app-primary: #1170c4;
+  --app-primary-dark: #0d558f;
+  --app-accent: #f3d53c;
+  --app-accent-deep: #d1a81e;
+  --app-surface: rgba(255, 255, 255, 0.88);
+  --app-border: rgba(148, 163, 184, 0.22);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--app-ink);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(17, 112, 196, 0.16), transparent 32%),
+    radial-gradient(circle at top right, rgba(31, 135, 216, 0.14), transparent 26%),
+    radial-gradient(circle at bottom left, rgba(243, 213, 60, 0.16), transparent 24%),
+    linear-gradient(180deg, #fbfdff 0%, #f5f8fd 52%, #eef3fb 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  color: white;
+  background: var(--app-primary);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
 
 @layer base {
   input[type="number"]::-webkit-inner-spin-button,
@@ -16,7 +67,131 @@
     -webkit-appearance: none;
     margin: 0;
   }
+
+  input,
+  select,
+  textarea {
+    color: var(--app-ink);
+  }
+
+  input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    @apply rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm outline-none transition duration-200;
+  }
+
+  input:not([type="file"]):not([type="checkbox"]):not([type="radio"]):focus,
+  select:focus,
+  textarea:focus {
+    @apply border-blue-400 ring-4 ring-blue-100;
+    box-shadow:
+      0 0 0 4px rgba(59, 130, 246, 0.14),
+      0 0 0 7px rgba(243, 213, 60, 0.12);
+  }
+
+  table {
+    @apply w-full border-collapse overflow-hidden bg-white;
+  }
+
+  thead tr {
+    background: linear-gradient(135deg, #0d558f 0%, #1170c4 58%, #1f87d8 100%);
+  }
+
+  th {
+    @apply px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-white;
+  }
+
+  td {
+    @apply px-6 py-4 align-middle text-sm text-slate-700;
+  }
+
+  tbody tr {
+    @apply border-b border-slate-100 transition-colors duration-200 hover:bg-blue-50;
+  }
 }
-::-webkit-scrollbar {
-  display: none;
+
+@layer components {
+  .page-shell {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .panel-section {
+    @apply rounded-3xl border backdrop-blur-xl;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.84));
+    border-color: rgba(148, 163, 184, 0.18);
+    box-shadow:
+      0 24px 70px -38px rgba(15, 23, 42, 0.45),
+      0 1px 0 rgba(243, 213, 60, 0.32) inset;
+  }
+
+  .soft-divider {
+    @apply border-slate-200;
+  }
+
+  .table-shell {
+    @apply overflow-hidden rounded-3xl border bg-white;
+    border-color: var(--app-border);
+    box-shadow: 0 18px 60px -34px rgba(15, 23, 42, 0.35);
+  }
+
+  .table-shell thead tr {
+    background: linear-gradient(135deg, #0d558f 0%, #1170c4 58%, #1f87d8 100%);
+  }
+
+  .table-shell th {
+    @apply px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-white;
+  }
+
+  .table-shell td {
+    @apply px-6 py-4 align-middle text-sm text-slate-700;
+  }
+
+  .table-shell tbody tr {
+    @apply border-b border-slate-100 transition-colors duration-200 hover:bg-blue-50;
+  }
+
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm;
+    background: rgba(2, 6, 23, 0.55);
+  }
+
+  .modal-card {
+    @apply w-full rounded-3xl border backdrop-blur-xl;
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 28px 90px -42px rgba(15, 23, 42, 0.55);
+  }
+
+  .empty-state-panel {
+    @apply rounded-3xl border border-dashed border-slate-300 p-10 text-center shadow-sm;
+    background: rgba(255, 255, 255, 0.75);
+  }
+
+  .dashboard-menu {
+    @apply grid gap-3 sm:grid-cols-2 xl:grid-cols-4;
+  }
+
+  .dashboard-menu-button {
+    @apply flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition duration-200;
+    border-color: rgba(148, 163, 184, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .dashboard-menu-button:hover {
+    @apply -translate-y-0.5 border-blue-200 bg-blue-50 shadow-md;
+    box-shadow:
+      0 14px 36px -28px rgba(17, 112, 196, 0.55),
+      0 1px 0 rgba(243, 213, 60, 0.32) inset;
+  }
+
+  .dashboard-menu-button.is-active {
+    @apply text-white shadow-lg;
+    border-color: rgba(243, 213, 60, 0.55);
+    background:
+      linear-gradient(135deg, #0d558f 0%, #1170c4 56%, #1f87d8 100%);
+    box-shadow:
+      0 20px 50px -30px rgba(17, 112, 196, 0.75),
+      0 1px 0 rgba(243, 213, 60, 0.45) inset;
+  }
 }

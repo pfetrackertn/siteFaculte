@@ -2,6 +2,9 @@ const nodemailer = require("nodemailer");
 
 const sendResetMail = async (email, resetToken, type) => {
   try {
+    const frontendUrl =
+      process.env.FRONTEND_API_LINK || "http://localhost:3000";
+
     const transporter = nodemailer.createTransport({
       service: "Gmail",
       auth: {
@@ -11,13 +14,13 @@ const sendResetMail = async (email, resetToken, type) => {
     });
 
     const mailOptions = {
-      from: process.env.EMAIL,
+      from: process.env.NODEMAILER_EMAIL,
       to: email,
       subject: "Demande de reinitialisation du mot de passe",
       html: `
                 <h2>Reinitialisation du mot de passe</h2>
                 <p>Vous avez demande la reinitialisation de votre mot de passe. Cliquez sur le lien ci-dessous pour definir un nouveau mot de passe. Ce lien est valable pendant 10 minutes.</p>
-                <a href="${process.env.FRONTEND_API_LINK}/${type}/update-password/${resetToken}" target="_blank">Reinitialiser le mot de passe</a>
+                <a href="${frontendUrl}/${type}/update-password/${resetToken}" target="_blank">Reinitialiser le mot de passe</a>
                 <p>Si vous n'etes pas a l'origine de cette demande, veuillez ignorer cet e-mail.</p>
             `,
     };

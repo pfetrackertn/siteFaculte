@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { MdLink } from "react-icons/md";
 import Heading from "../../components/Heading";
 import { useSelector } from "react-redux";
@@ -6,7 +6,10 @@ import axiosWrapper from "../../utils/AxiosWrapper";
 import toast from "react-hot-toast";
 import CustomButton from "../../components/CustomButton";
 import Loading from "../../components/Loading";
-import { getMaterialTypeLabel } from "../../utils/displayText";
+import {
+  getAcademicClassLabel,
+  getMaterialTypeLabel,
+} from "../../utils/displayText";
 
 const Material = () => {
   const [materials, setMaterials] = useState([]);
@@ -18,19 +21,20 @@ const Material = () => {
     type: "",
   });
 
-  useEffect(() => {
-    fetchSubjects();
-  }, []);
+  const branchId = userData?.branchId?._id;
+  const semester = userData?.semester;
+  const classId = userData?.classId?._id;
 
-  useEffect(() => {
-    fetchMaterials();
-  }, [filters]);
+  const fetchSubjects = useCallback(async () => {
+    if (!semester || !branchId) {
+      setSubjects([]);
+      return;
+    }
 
-  const fetchSubjects = async () => {
     try {
       setDataLoading(true);
       const response = await axiosWrapper.get(
-        `/subject?semester=${userData.semester}&branch=${userData.branchId._id}`,
+        `/subject?semester=${semester}&branch=${branchId}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -50,18 +54,24 @@ const Material = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [branchId, semester]);
 
-  const fetchMaterials = async () => {
+  const fetchMaterials = useCallback(async () => {
+    if (!semester || !branchId) {
+      setMaterials([]);
+      return;
+    }
+
     try {
       setDataLoading(true);
       const queryParams = new URLSearchParams({
-        semester: userData.semester,
-        branch: userData.branchId._id,
+        semester,
+        branch: branchId,
       });
 
       if (filters.subject) queryParams.append("subject", filters.subject);
       if (filters.type) queryParams.append("type", filters.type);
+      if (classId) queryParams.append("classId", classId);
 
       const response = await axiosWrapper.get(`/material?${queryParams}`, {
         headers: {
@@ -81,7 +91,15 @@ const Material = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [branchId, classId, filters, semester]);
+
+  useEffect(() => {
+    fetchSubjects();
+  }, [fetchSubjects]);
+
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -148,6 +166,7 @@ const Material = () => {
                 <th className="py-4 px-6 text-left font-semibold">Fichier</th>
                 <th className="py-4 px-6 text-left font-semibold">Titre</th>
                 <th className="py-4 px-6 text-left font-semibold">Matiere</th>
+                <th className="py-4 px-6 text-left font-semibold">Classe</th>
                 <th className="py-4 px-6 text-left font-semibold">Type</th>
               </tr>
             </thead>
@@ -169,12 +188,17 @@ const Material = () => {
                     </td>
                     <td className="py-4 px-6">{material.title}</td>
                     <td className="py-4 px-6">{material.subject.name}</td>
+                    <td className="py-4 px-6">
+                      {material.classId
+                        ? getAcademicClassLabel(material.classId)
+                        : "Generale"}
+                    </td>
                     <td className="py-4 px-6">{getMaterialTypeLabel(material.type)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="4" className="text-center text-base pt-10">
+                  <td colSpan="5" className="text-center text-base pt-10">
                     Aucune ressource trouvee.
                   </td>
                 </tr>

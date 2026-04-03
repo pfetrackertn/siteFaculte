@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { MdOutlineDelete, MdEdit } from "react-icons/md";
 import { IoMdAdd } from "react-icons/io";
@@ -27,12 +27,7 @@ const Subject = () => {
   const userToken = localStorage.getItem("userToken");
   const [dataLoading, setDataLoading] = useState(false);
 
-  useEffect(() => {
-    getSubjectHandler();
-    getBranchHandler();
-  }, []);
-
-  const getSubjectHandler = async () => {
+  const getSubjectHandler = useCallback(async () => {
     try {
       setDataLoading(true);
       const response = await axiosWrapper.get(`/subject`, {
@@ -54,9 +49,9 @@ const Subject = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [userToken]);
 
-  const getBranchHandler = async () => {
+  const getBranchHandler = useCallback(async () => {
     try {
       setDataLoading(true);
       const response = await axiosWrapper.get(`/branch`, {
@@ -78,7 +73,12 @@ const Subject = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [userToken]);
+
+  useEffect(() => {
+    getSubjectHandler();
+    getBranchHandler();
+  }, [getBranchHandler, getSubjectHandler]);
 
   const addSubjectHandler = async () => {
     if (

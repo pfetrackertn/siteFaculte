@@ -1,9 +1,44 @@
 const Material = require("../models/material.model");
+const AcademicClass = require("../models/class.model");
 const ApiResponse = require("../utils/ApiResponse");
+
+const normalizeClassId = (classId) => {
+  if (!classId || classId === "null" || classId === "undefined") {
+    return null;
+  }
+
+  return classId;
+};
+
+const ensureMaterialClassMatchesContext = async ({ classId, branch, semester }) => {
+  if (!classId) {
+    return { academicClass: null };
+  }
+
+  const academicClass = await AcademicClass.findById(classId);
+
+  if (!academicClass) {
+    return { error: "Classe introuvable" };
+  }
+
+  if (branch && academicClass.branchId.toString() !== branch.toString()) {
+    return {
+      error: "La classe selectionnee ne correspond pas a la filiere choisie",
+    };
+  }
+
+  if (semester && Number(academicClass.semester) !== Number(semester)) {
+    return {
+      error: "La classe selectionnee ne correspond pas au semestre choisi",
+    };
+  }
+
+  return { academicClass };
+};
 
 const getMaterialsController = async (req, res) => {
   try {
-    const { subject, faculty, semester, branch, type } = req.query;
+    const { subject, faculty, semester, branch, type, classId } = req.query;
     let query = {};
 
     if (subject) query.subject = subject;
@@ -11,11 +46,22 @@ const getMaterialsController = async (req, res) => {
     if (semester) query.semester = semester;
     if (branch) query.branch = branch;
     if (type) query.type = type;
+    if (classId) {
+      query.$or = [{ classId }, { classId: null }];
+    }
 
     const materials = await Material.find(query)
       .populate("subject")
       .populate("faculty")
       .populate("branch")
+      .populate({
+        path: "classId",
+        select: "name code semester branchId",
+        populate: {
+          path: "branchId",
+          select: "name branchId",
+        },
+      })
       .sort({ createdAt: -1 });
 
     if (!materials || materials.length === 0) {
@@ -33,6 +79,7 @@ const getMaterialsController = async (req, res) => {
 const addMaterialController = async (req, res) => {
   try {
     const { title, subject, semester, branch, type } = req.body;
+    const classId = normalizeClassId(req.body.classId);
 
     if (!title || !subject || !semester || !branch || !type) {
       return ApiResponse.badRequest("Tous les champs sont obligatoires").send(
@@ -49,12 +96,23 @@ const addMaterialController = async (req, res) => {
       return ApiResponse.badRequest("Type de ressource invalide").send(res);
     }
 
+    const classValidation = await ensureMaterialClassMatchesContext({
+      classId,
+      branch,
+      semester,
+    });
+
+    if (classValidation.error) {
+      return ApiResponse.badRequest(classValidation.error).send(res);
+    }
+
     const material = await Material.create({
       title,
       subject,
       faculty: req.userId,
       semester,
       branch,
+      classId,
       type,
       file: req.file.filename,
     });
@@ -62,7 +120,15 @@ const addMaterialController = async (req, res) => {
     const populatedMaterial = await Material.findById(material._id)
       .populate("subject")
       .populate("faculty")
-      .populate("branch");
+      .populate("branch")
+      .populate({
+        path: "classId",
+        select: "name code semester branchId",
+        populate: {
+          path: "branchId",
+          select: "name branchId",
+        },
+      });
 
     return ApiResponse.created(populatedMaterial, "Ressource ajoutee avec succes")
       .send(res);
@@ -95,10 +161,30 @@ const updateMaterialController = async (req, res) => {
     }
 
     const updateData = {};
+    const normalizedClassId = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "classId"
+    )
+      ? normalizeClassId(req.body.classId)
+      : material.classId;
+
+    const classValidation = await ensureMaterialClassMatchesContext({
+      classId: normalizedClassId,
+      branch: branch || material.branch,
+      semester: semester || material.semester,
+    });
+
+    if (classValidation.error) {
+      return ApiResponse.badRequest(classValidation.error).send(res);
+    }
+
     if (title) updateData.title = title;
     if (subject) updateData.subject = subject;
     if (semester) updateData.semester = semester;
     if (branch) updateData.branch = branch;
+    if (Object.prototype.hasOwnProperty.call(req.body, "classId")) {
+      updateData.classId = normalizedClassId;
+    }
     if (type) {
       if (!["notes", "assignment", "syllabus", "other"].includes(type)) {
         return ApiResponse.badRequest("Type de ressource invalide").send(res);
@@ -112,7 +198,15 @@ const updateMaterialController = async (req, res) => {
     })
       .populate("subject")
       .populate("faculty")
-      .populate("branch");
+      .populate("branch")
+      .populate({
+        path: "classId",
+        select: "name code semester branchId",
+        populate: {
+          path: "branchId",
+          select: "name branchId",
+        },
+      });
 
     return ApiResponse.success(
       updatedMaterial,

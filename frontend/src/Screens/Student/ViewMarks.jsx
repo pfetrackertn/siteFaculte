@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import axiosWrapper from "../../utils/AxiosWrapper";
 import Heading from "../../components/Heading";
@@ -13,7 +13,7 @@ const ViewMarks = () => {
   const [marks, setMarks] = useState([]);
   const userToken = localStorage.getItem("userToken");
 
-  const fetchMarks = async (semester) => {
+  const fetchMarks = useCallback(async (semester) => {
     setDataLoading(true);
     toast.loading("Chargement des notes...");
     try {
@@ -35,11 +35,13 @@ const ViewMarks = () => {
       setDataLoading(false);
       toast.dismiss();
     }
-  };
+  }, [userToken]);
 
   useEffect(() => {
-    fetchMarks(userData?.semester || 1);
-  }, []);
+    const currentSemester = userData?.semester || 1;
+    setSelectedSemester(currentSemester);
+    fetchMarks(currentSemester);
+  }, [fetchMarks, userData?.semester]);
 
   const handleSemesterChange = (e) => {
     const semester = e.target.value;

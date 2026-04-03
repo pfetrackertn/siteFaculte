@@ -35,6 +35,11 @@ const studentDetailsSchema = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    classId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicClass",
+      default: null,
+    },
     gender: {
       type: String,
       required: true,

@@ -3,21 +3,19 @@ const Student = require("../models/details/student-details.model");
 
 const getMarksController = async (req, res) => {
   try {
-    const { studentId, semester, examId } = req.query;
+    const { studentId, semester, examId, subjectId } = req.query;
 
-    const query = { student: studentId };
-    if (semester) {
-      query.semester = semester;
-    }
-
-    if (examId) {
-      query.examId = examId;
-    }
+    const query = {};
+    if (studentId) query.studentId = studentId;
+    if (semester) query.semester = Number(semester);
+    if (examId) query.examId = examId;
+    if (subjectId) query.subjectId = subjectId;
 
     const marks = await Marks.find(query)
-      .populate("branch", "name")
-      .populate("marks.subject", "name")
-      .populate("student", "firstName lastName enrollmentNo");
+      .populate("studentId", "firstName middleName lastName enrollmentNo")
+      .populate("subjectId", "name code")
+      .populate("examId", "name examType totalMarks")
+      .sort({ semester: 1, createdAt: -1 });
 
     if (!marks || marks.length === 0) {
       return res.status(200).json({
@@ -27,14 +25,14 @@ const getMarksController = async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "Notes chargees avec succes",
       data: marks,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("Error in getMarksController:", error);
+    return res.status(500).json({
       success: false,
       message: "Erreur interne du serveur",
     });
@@ -43,12 +41,19 @@ const getMarksController = async (req, res) => {
 
 const addMarksController = async (req, res) => {
   try {
-    const { studentId, semester, branch, marks } = req.body;
+    const { studentId, semester, subjectId, examId, marksObtained } = req.body;
 
-    if (!studentId || !semester || !branch || !marks || !Array.isArray(marks)) {
+    if (
+      !studentId ||
+      !semester ||
+      !subjectId ||
+      !examId ||
+      marksObtained === undefined
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Donnees d'entree invalides",
+        message:
+          "Donnees invalides. Champs requis : studentId, semester, subjectId, examId et marksObtained",
       });
     }
 
@@ -60,28 +65,37 @@ const addMarksController = async (req, res) => {
       });
     }
 
-    let existingMarks = await Marks.findOne({ student: studentId, semester });
+    const marks = await Marks.findOneAndUpdate(
+      {
+        studentId,
+        semester: Number(semester),
+        subjectId,
+        examId,
+      },
+      {
+        studentId,
+        semester: Number(semester),
+        subjectId,
+        examId,
+        marksObtained: Number(marksObtained),
+      },
+      {
+        new: true,
+        upsert: true,
+      }
+    )
+      .populate("studentId", "firstName middleName lastName enrollmentNo")
+      .populate("subjectId", "name code")
+      .populate("examId", "name examType totalMarks");
 
-    if (existingMarks) {
-      existingMarks.marks = marks;
-      await existingMarks.save();
-    } else {
-      existingMarks = await Marks.create({
-        student: studentId,
-        semester,
-        branch,
-        marks,
-      });
-    }
-
-    res.json({
+    return res.json({
       success: true,
       message: "Notes mises a jour avec succes",
-      data: existingMarks,
+      data: marks,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("Error in addMarksController:", error);
+    return res.status(500).json({
       success: false,
       message: "Erreur interne du serveur",
     });
@@ -101,13 +115,13 @@ const deleteMarksController = async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "Notes supprimees avec succes",
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("Error in deleteMarksController:", error);
+    return res.status(500).json({
       success: false,
       message: "Erreur interne du serveur",
     });
@@ -132,11 +146,11 @@ const addBulkMarksController = async (req, res) => {
         studentId: markData.studentId,
         examId,
         subjectId,
-        semester,
+        semester: Number(semester),
       });
 
       if (existingMark) {
-        existingMark.marksObtained = markData.obtainedMarks;
+        existingMark.marksObtained = Number(markData.obtainedMarks);
         await existingMark.save();
         results.push(existingMark);
       } else {
@@ -144,21 +158,21 @@ const addBulkMarksController = async (req, res) => {
           studentId: markData.studentId,
           examId,
           subjectId,
-          semester,
-          marksObtained: markData.obtainedMarks,
+          semester: Number(semester),
+          marksObtained: Number(markData.obtainedMarks),
         });
         results.push(newMark);
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "Notes enregistrees avec succes",
       data: results,
     });
   } catch (error) {
     console.error("Error in addBulkMarksController:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message || "Erreur lors de l'enregistrement des notes",
     });
@@ -201,20 +215,21 @@ const getStudentsWithMarksController = async (req, res) => {
       const studentMarks = marks.find(
         (m) => m.studentId.toString() === student._id.toString()
       );
+
       return {
         ...student.toObject(),
         obtainedMarks: studentMarks ? studentMarks.marksObtained : 0,
       };
     });
 
-    res.json({
+    return res.json({
       success: true,
       message: "Etudiants et notes charges avec succes",
       data: studentsWithMarks,
     });
   } catch (error) {
     console.error("Error in getStudentsWithMarksController:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message:
         error.message || "Erreur lors du chargement des etudiants avec notes",
@@ -239,7 +254,8 @@ const getStudentMarksController = async (req, res) => {
       semester: Number(semester),
     })
       .populate("subjectId", "name")
-      .populate("examId", "name examType totalMarks");
+      .populate("examId", "name examType totalMarks")
+      .sort({ createdAt: -1 });
 
     if (!marks || marks.length === 0) {
       return res.status(200).json({
@@ -249,14 +265,14 @@ const getStudentMarksController = async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       message: "Notes chargees avec succes",
       data: marks,
     });
   } catch (error) {
     console.error("Error in getStudentMarksController:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message || "Erreur lors du chargement des notes",
     });

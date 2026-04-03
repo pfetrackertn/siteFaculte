@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { toast } from "react-hot-toast";
-import axiosWrapper from "../utils/AxiosWrapper";
 import { IoMdClose } from "react-icons/io";
+import axiosWrapper from "../utils/AxiosWrapper";
 import CustomButton from "./CustomButton";
 
 const UpdatePasswordLoggedIn = ({ onClose }) => {
@@ -45,6 +45,7 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        onClose();
       } else {
         toast.error(response.data.message);
       }
@@ -59,63 +60,68 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
   };
 
   return (
-    <section className="w-full h-full flex justify-center items-center bg-black bg-opacity-50 fixed top-0 left-0 z-50">
-      <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md w-[50%]">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-semibold mb-6">
-            Modifier le mot de passe
-          </h2>
+    <section className="modal-backdrop">
+      <div className="modal-card max-w-lg p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+              Securite du compte
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-900">
+              Modifier le mot de passe
+            </h2>
+          </div>
           <CustomButton
             onClick={onClose}
-            className="bg-red-500 p-2 rounded-full text-white"
+            variant="secondary"
+            className="!rounded-xl !p-2"
           >
             <IoMdClose className="text-2xl" />
           </CustomButton>
         </div>
-        <form onSubmit={handlePasswordUpdate}>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
+
+        <form onSubmit={handlePasswordUpdate} className="mt-8 space-y-5">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
               Mot de passe actuel
             </label>
             <input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
               Nouveau mot de passe
             </label>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
               Confirmer le nouveau mot de passe
             </label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? "Mise a jour..." : "Modifier le mot de passe"}
-          </button>
+          <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-5">
+            <CustomButton type="button" variant="secondary" onClick={onClose}>
+              Annuler
+            </CustomButton>
+            <CustomButton type="submit" disabled={isLoading}>
+              {isLoading ? "Mise a jour..." : "Enregistrer"}
+            </CustomButton>
+          </div>
         </form>
       </div>
     </section>

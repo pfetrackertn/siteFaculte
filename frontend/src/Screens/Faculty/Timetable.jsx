@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { MdOutlineDelete, MdEdit, MdLink } from "react-icons/md";
 import { IoMdAdd, IoMdClose } from "react-icons/io";
 import Heading from "../../components/Heading";
@@ -6,6 +6,10 @@ import toast from "react-hot-toast";
 import axiosWrapper from "../../utils/AxiosWrapper";
 import DeleteConfirm from "../../components/DeleteConfirm";
 import CustomButton from "../../components/CustomButton";
+import {
+  formatSemesterLabel,
+  getAcademicClassLabel,
+} from "../../utils/displayText";
 
 const AddTimetableModal = ({
   isOpen,
@@ -13,16 +17,48 @@ const AddTimetableModal = ({
   onSubmit,
   initialData = null,
   branches,
+  classes,
 }) => {
   const [formData, setFormData] = useState({
     branch: initialData?.branch || "",
     semester: initialData?.semester || "",
+    classId: initialData?.classId || "",
     file: null,
     previewUrl: initialData?.file || "",
   });
 
+  useEffect(() => {
+    setFormData({
+      branch: initialData?.branch || "",
+      semester: initialData?.semester || "",
+      classId: initialData?.classId || "",
+      file: null,
+      previewUrl: initialData?.file || "",
+    });
+  }, [initialData, isOpen]);
+
+  const filteredClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      if (formData.branch && academicClass.branchId?._id !== formData.branch) {
+        return false;
+      }
+
+      if (
+        formData.semester &&
+        Number(academicClass.semester) !== Number(formData.semester)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [classes, formData.branch, formData.semester]);
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
+    if (!file) {
+      return;
+    }
     setFormData({
       ...formData,
       file,
@@ -83,7 +119,25 @@ const AddTimetableModal = ({
               <option value="">Choisir un semestre</option>
               {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                 <option key={sem} value={sem}>
-                  Semestre {sem}
+                  {formatSemesterLabel(sem)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block mb-2">Classe</label>
+            <select
+              value={formData.classId}
+              onChange={(e) =>
+                setFormData({ ...formData, classId: e.target.value })
+              }
+              className="w-full px-4 py-2 border rounded-md"
+            >
+              <option value="">Aucune classe specifique</option>
+              {filteredClasses.map((academicClass) => (
+                <option key={academicClass._id} value={academicClass._id}>
+                  {getAcademicClassLabel(academicClass)}
                 </option>
               ))}
             </select>
@@ -124,7 +178,8 @@ const AddTimetableModal = ({
 };
 
 const Timetable = () => {
-  const [branch, setBranch] = useState();
+  const [branch, setBranch] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [timetables, setTimetables] = useState([]);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedTimetableId, setSelectedTimetableId] = useState(null);
@@ -132,12 +187,7 @@ const Timetable = () => {
   const [editingTimetable, setEditingTimetable] = useState(null);
   const userToken = localStorage.getItem("userToken");
 
-  useEffect(() => {
-    getBranchHandler();
-    getTimetablesHandler();
-  }, []);
-
-  const getBranchHandler = async () => {
+  const getBranchHandler = useCallback(async () => {
     try {
       const response = await axiosWrapper.get(`/branch`, {
         headers: {
@@ -153,9 +203,9 @@ const Timetable = () => {
       console.error(error);
       toast.error(error.response?.data?.message || "Erreur lors du chargement des filieres");
     }
-  };
+  }, [userToken]);
 
-  const getTimetablesHandler = async () => {
+  const getTimetablesHandler = useCallback(async () => {
     try {
       const response = await axiosWrapper.get(`/timetable`, {
         headers: {
@@ -174,7 +224,35 @@ const Timetable = () => {
           "Impossible de charger les emplois du temps"
       );
     }
-  };
+  }, [userToken]);
+
+  const getClassesHandler = useCallback(async () => {
+    try {
+      const response = await axiosWrapper.get(`/class`, {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+      if (response.data.success) {
+        setClasses(response.data.data);
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        setClasses([]);
+        return;
+      }
+
+      toast.error(
+        error.response?.data?.message || "Erreur lors du chargement des classes"
+      );
+    }
+  }, [userToken]);
+
+  useEffect(() => {
+    getBranchHandler();
+    getTimetablesHandler();
+    getClassesHandler();
+  }, [getBranchHandler, getClassesHandler, getTimetablesHandler]);
 
   const handleSubmitTimetable = async (formData) => {
     const headers = {
@@ -185,6 +263,7 @@ const Timetable = () => {
     const submitData = new FormData();
     submitData.append("branch", formData.branch);
     submitData.append("semester", formData.semester);
+    submitData.append("classId", formData.classId);
     if (formData.file) {
       submitData.append("file", formData.file);
     }
@@ -261,7 +340,15 @@ const Timetable = () => {
   };
 
   const editTimetableHandler = (timetable) => {
-    setEditingTimetable(timetable);
+    setEditingTimetable({
+      _id: timetable._id,
+      branch: timetable.branch?._id || "",
+      semester: timetable.semester,
+      classId: timetable.classId?._id || "",
+      file: timetable.link
+        ? `${process.env.REACT_APP_MEDIA_LINK}/${timetable.link}`
+        : "",
+    });
     setShowAddModal(true);
   };
 
@@ -281,6 +368,7 @@ const Timetable = () => {
               <th className="py-4 px-6 text-left font-semibold">Voir</th>
               <th className="py-4 px-6 text-left font-semibold">Filiere</th>
               <th className="py-4 px-6 text-left font-semibold">Semestre</th>
+              <th className="py-4 px-6 text-left font-semibold">Classe</th>
               <th className="py-4 px-6 text-left font-semibold">Cree le</th>
               <th className="py-4 px-6 text-center font-semibold">Actions</th>
             </tr>
@@ -299,7 +387,10 @@ const Timetable = () => {
                   </a>
                 </td>
                 <td className="py-4 px-6">{item.branch.name}</td>
-                <td className="py-4 px-6">{item.semester}</td>
+                <td className="py-4 px-6">{formatSemesterLabel(item.semester)}</td>
+                <td className="py-4 px-6">
+                  {item.classId ? getAcademicClassLabel(item.classId) : "Generale"}
+                </td>
                 <td className="py-4 px-6">
                   {new Date(item.createdAt).toLocaleDateString()}
                 </td>
@@ -332,6 +423,7 @@ const Timetable = () => {
         onSubmit={handleSubmitTimetable}
         initialData={editingTimetable}
         branches={branch}
+        classes={classes}
       />
 
       <DeleteConfirm

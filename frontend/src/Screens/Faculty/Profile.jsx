@@ -9,7 +9,15 @@ import {
 
 const Profile = ({ profileData }) => {
   const [showPasswordUpdate, setShowPasswordUpdate] = useState(false);
+
   if (!profileData) return null;
+
+  const emptyText = "Non renseigne";
+  const emergencyContact = profileData.emergencyContact || {};
+  const salary =
+    profileData.salary != null
+      ? `₹${Number(profileData.salary).toLocaleString("fr-FR")}`
+      : emptyText;
 
   return (
     <div className="max-w-6xl mx-auto p-8">
@@ -28,7 +36,7 @@ const Profile = ({ profileData }) => {
               Identifiant employe : {profileData.employeeId}
             </p>
             <p className="text-lg text-blue-600 font-medium">
-              {profileData.designation}
+              {profileData.designation || emptyText}
             </p>
           </div>
         </div>
@@ -55,21 +63,25 @@ const Profile = ({ profileData }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label className="text-sm font-medium text-gray-500">E-mail</label>
-              <p className="text-gray-900">{profileData.email}</p>
+              <p className="text-gray-900">{profileData.email || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Telephone</label>
-              <p className="text-gray-900">{profileData.phone}</p>
+              <p className="text-gray-900">{profileData.phone || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Genre</label>
-              <p className="text-gray-900">{getGenderLabel(profileData.gender)}</p>
+              <p className="text-gray-900">
+                {getGenderLabel(profileData.gender) || emptyText}
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">
                 Groupe sanguin
               </label>
-              <p className="text-gray-900">{profileData.bloodGroup}</p>
+              <p className="text-gray-900">
+                {profileData.bloodGroup || emptyText}
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">
@@ -87,13 +99,13 @@ const Profile = ({ profileData }) => {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Salaire</label>
-              <p className="text-gray-900">
-                ₹{profileData.salary.toLocaleString("fr-FR")}
-              </p>
+              <p className="text-gray-900">{salary}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Statut</label>
-              <p className="text-gray-900">{getStatusLabel(profileData.status)}</p>
+              <p className="text-gray-900">
+                {getStatusLabel(profileData.status) || emptyText}
+              </p>
             </div>
           </div>
         </div>
@@ -105,25 +117,25 @@ const Profile = ({ profileData }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label className="text-sm font-medium text-gray-500">Adresse</label>
-              <p className="text-gray-900">{profileData.address}</p>
+              <p className="text-gray-900">{profileData.address || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Ville</label>
-              <p className="text-gray-900">{profileData.city}</p>
+              <p className="text-gray-900">{profileData.city || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Region</label>
-              <p className="text-gray-900">{profileData.state}</p>
+              <p className="text-gray-900">{profileData.state || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">
                 Code postal
               </label>
-              <p className="text-gray-900">{profileData.pincode}</p>
+              <p className="text-gray-900">{profileData.pincode || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Pays</label>
-              <p className="text-gray-900">{profileData.country}</p>
+              <p className="text-gray-900">{profileData.country || emptyText}</p>
             </div>
           </div>
         </div>
@@ -135,21 +147,17 @@ const Profile = ({ profileData }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <label className="text-sm font-medium text-gray-500">Nom</label>
-              <p className="text-gray-900">
-                {profileData.emergencyContact.name}
-              </p>
+              <p className="text-gray-900">{emergencyContact.name || emptyText}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Lien</label>
               <p className="text-gray-900">
-                {profileData.emergencyContact.relationship}
+                {emergencyContact.relationship || emptyText}
               </p>
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Telephone</label>
-              <p className="text-gray-900">
-                {profileData.emergencyContact.phone}
-              </p>
+              <p className="text-gray-900">{emergencyContact.phone || emptyText}</p>
             </div>
           </div>
         </div>

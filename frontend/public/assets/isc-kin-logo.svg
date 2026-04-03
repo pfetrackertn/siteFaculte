@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280" role="img" aria-labelledby="title desc">
+  <title id="title">Logo ISC-KIN</title>
+  <desc id="desc">Blason stylise jaune et bleu avec livre, feuilles et texte ISC.</desc>
+  <defs>
+    <clipPath id="shieldClip">
+      <path d="M20 14h200v132c0 65-43 107-100 121C63 253 20 211 20 146Z" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#shieldClip)">
+    <rect x="20" y="14" width="100" height="253" fill="#f7df37" />
+    <rect x="120" y="14" width="100" height="253" fill="#1f87d8" />
+
+    <path d="M120 14v253" fill="none" stroke="#1e293b" stroke-width="2.5" />
+
+    <g fill="#ffffff" stroke="#1e293b" stroke-width="1.6">
+      <circle cx="120" cy="62" r="15" />
+      <circle cx="120" cy="95" r="15" />
+      <circle cx="120" cy="128" r="15" />
+      <circle cx="120" cy="161" r="15" />
+      <circle cx="120" cy="194" r="15" />
+      <circle cx="120" cy="227" r="15" />
+    </g>
+
+    <g fill="none" stroke="#2d8c3c" stroke-linecap="round">
+      <path d="M35 55c20-10 47-6 70 10" stroke-width="6" />
+      <path d="M40 70c14-5 31-3 51 9" stroke-width="4" />
+      <path d="M52 82c10-4 22-2 36 8" stroke-width="3" />
+
+      <path d="M36 96c21-9 49-5 72 11" stroke-width="6" />
+      <path d="M42 112c16-6 33-2 53 10" stroke-width="4" />
+      <path d="M54 124c10-4 21-1 34 7" stroke-width="3" />
+    </g>
+
+    <g transform="translate(38 188)">
+      <path d="M0 18c15-14 34-15 48-4v34c-15-8-32-7-48 1Z" fill="#ffffff" stroke="#1e293b" stroke-width="2.4" />
+      <path d="M96 18c-15-14-34-15-48-4v34c15-8 32-7 48 1Z" fill="#ffffff" stroke="#1e293b" stroke-width="2.4" />
+      <path d="M48 14v36" stroke="#1e293b" stroke-width="2.2" />
+      <path d="M13 30c11 2 23 6 35 12" stroke="#1e293b" stroke-width="1.6" />
+      <path d="M82 30c-11 2-23 6-35 12" stroke="#1e293b" stroke-width="1.6" />
+      <path d="M8 16h82" stroke="#f3c000" stroke-width="4" stroke-linecap="round" />
+      <path d="M23 0h50" stroke="#f3c000" stroke-width="7" stroke-linecap="round" />
+    </g>
+
+    <g transform="translate(146 34)">
+      <path d="M0 24C9 0 34-3 56 6c15 6 28 5 38-2v36c-13 8-25 11-37 9-19-3-31 4-41 18-5-22-9-35-16-43Z" fill="#ffffff" stroke="#1e293b" stroke-width="2.5" />
+      <path d="M58 43c7 8 11 18 12 31" fill="none" stroke="#1e293b" stroke-width="2.4" stroke-linecap="round" />
+      <path d="M72 39c7 10 10 22 11 38" fill="none" stroke="#1e293b" stroke-width="2.4" stroke-linecap="round" />
+      <path d="M86 32c7 12 9 25 9 44" fill="none" stroke="#1e293b" stroke-width="2.4" stroke-linecap="round" />
+    </g>
+
+    <text x="147" y="214" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" letter-spacing="4">ISC</text>
+  </g>
+
+  <path d="M20 14h200v132c0 65-43 107-100 121C63 253 20 211 20 146Z" fill="none" stroke="#111827" stroke-width="4" />
+</svg>

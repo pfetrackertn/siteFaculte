@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { MdOutlineDelete, MdEdit } from "react-icons/md";
 import { IoMdAdd } from "react-icons/io";
@@ -32,11 +32,7 @@ const Exam = () => {
   const [processLoading, setProcessLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
 
-  useEffect(() => {
-    getExamsHandler();
-  }, []);
-
-  const getExamsHandler = async () => {
+  const getExamsHandler = useCallback(async () => {
     try {
       setDataLoading(true);
       let link = "/exam";
@@ -67,7 +63,11 @@ const Exam = () => {
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [userData.semester]);
+
+  useEffect(() => {
+    getExamsHandler();
+  }, [getExamsHandler]);
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);

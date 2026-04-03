@@ -52,7 +52,7 @@ const generateEmployeeId = () => {
 const registerFacultyController = async (req, res) => {
   try {
     const { email, phone } = req.body;
-    const profile = req.file.filename;
+    const profile = req.file?.filename || "";
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return ApiResponse.badRequest("Format d'e-mail invalide").send(res);
@@ -201,7 +201,8 @@ const getMyFacultyDetailsController = async (req, res) => {
   try {
     const user = await facultyDetails
       .findById(req.userId)
-      .select("-__v -password");
+      .select("-__v -password")
+      .populate("branchId", "name branchId");
     if (!user) {
       return ApiResponse.notFound("Utilisateur introuvable").send(res);
     }

@@ -1,143 +1,165 @@
 import React, { useState } from "react";
 import CustomButton from "../../components/CustomButton";
 import UpdatePasswordLoggedIn from "../../components/UpdatePasswordLoggedIn";
-import { formatLongDate, getGenderLabel } from "../../utils/displayText";
+import {
+  formatLongDate,
+  formatSemesterLabel,
+  getAcademicClassLabel,
+  getGenderLabel,
+} from "../../utils/displayText";
 
-const Profile = ({ profileData }) => {
+const renderValue = (value) => value || "Non renseigne";
+
+const ProfileField = ({ label, value }) => (
+  <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4">
+    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+      {label}
+    </p>
+    <p className="mt-2 text-sm font-medium leading-6 text-slate-800">
+      {renderValue(value)}
+    </p>
+  </div>
+);
+
+const StudentProfile = ({ profileData }) => {
   const [showPasswordUpdate, setShowPasswordUpdate] = useState(false);
-  if (!profileData) return null;
+
+  if (!profileData) {
+    return null;
+  }
+
+  const emergencyContact = profileData.emergencyContact || {};
+  const fullName = [
+    profileData.firstName,
+    profileData.middleName,
+    profileData.lastName,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
-      <div className="flex items-center gap-8 mb-12 border-b pb-8 justify-between">
-        <div className="flex items-center gap-8">
-          <img
-            src={`${process.env.REACT_APP_MEDIA_LINK}/${profileData.profile}`}
-            alt="Profil"
-            className="w-40 h-40 rounded-full object-cover ring-4 ring-blue-500 ring-offset-4"
-          />
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              {`${profileData.firstName} ${profileData.middleName} ${profileData.lastName}`}
-            </h1>
-            <p className="text-lg text-gray-600 mb-1">
-              {profileData.enrollmentNo}
-            </p>
-            <p className="text-lg text-blue-600 font-medium">
-              {profileData.branchId.name}
+    <div className="space-y-6 px-2 py-4 sm:px-4">
+      <section className="panel-section overflow-hidden px-6 py-7 sm:px-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+            <img
+              src={`${process.env.REACT_APP_MEDIA_LINK}/${profileData.profile}`}
+              alt={fullName || "Profil etudiant"}
+              className="h-28 w-28 rounded-[28px] object-cover ring-4 ring-blue-100"
+            />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+                Profil etudiant
+              </p>
+              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
+                {renderValue(fullName)}
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                {renderValue(profileData.email)}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <span className="rounded-full bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">
+                  {renderValue(profileData.branchId?.name)}
+                </span>
+                <span className="rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                  {formatSemesterLabel(profileData.semester)}
+                </span>
+                <span className="rounded-full bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                  {getAcademicClassLabel(profileData.classId)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <CustomButton
+              onClick={() => setShowPasswordUpdate((current) => !current)}
+            >
+              {showPasswordUpdate ? "Fermer le panneau" : "Modifier le mot de passe"}
+            </CustomButton>
+            <p className="text-sm text-slate-500">
+              Numero d'inscription :{" "}
+              <span className="font-semibold text-slate-800">
+                {renderValue(profileData.enrollmentNo)}
+              </span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-8 justify-end">
-          <CustomButton
-            onClick={() => setShowPasswordUpdate(!showPasswordUpdate)}
-            variant="primary"
-          >
-            {showPasswordUpdate ? "Masquer" : "Modifier le mot de passe"}
-          </CustomButton>
-        </div>
-        {showPasswordUpdate && (
-          <UpdatePasswordLoggedIn
-            onClose={() => setShowPasswordUpdate(false)}
-          />
-        )}
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-12">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
+      {showPasswordUpdate ? (
+        <section className="panel-section px-6 py-6 sm:px-8">
+          <UpdatePasswordLoggedIn onClose={() => setShowPasswordUpdate(false)} />
+        </section>
+      ) : null}
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="panel-section px-6 py-6 sm:px-8">
+          <h2 className="text-xl font-bold text-slate-900">
             Informations personnelles
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">E-mail</label>
-              <p className="text-gray-900">{profileData.email}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Telephone</label>
-              <p className="text-gray-900">{profileData.phone}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Genre</label>
-              <p className="text-gray-900">{getGenderLabel(profileData.gender)}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Groupe sanguin
-              </label>
-              <p className="text-gray-900">{profileData.bloodGroup}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Date de naissance
-              </label>
-              <p className="text-gray-900">{formatLongDate(profileData.dob)}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Semestre</label>
-              <p className="text-gray-900">{profileData.semester}</p>
-            </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <ProfileField label="E-mail" value={profileData.email} />
+            <ProfileField label="Telephone" value={profileData.phone} />
+            <ProfileField
+              label="Genre"
+              value={getGenderLabel(profileData.gender)}
+            />
+            <ProfileField label="Groupe sanguin" value={profileData.bloodGroup} />
+            <ProfileField
+              label="Date de naissance"
+              value={formatLongDate(profileData.dob)}
+            />
+            <ProfileField
+              label="Classe"
+              value={getAcademicClassLabel(profileData.classId)}
+            />
           </div>
-        </div>
+        </section>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
-            Adresse
+        <section className="panel-section px-6 py-6 sm:px-8">
+          <h2 className="text-xl font-bold text-slate-900">
+            Informations academiques
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Adresse</label>
-              <p className="text-gray-900">{profileData.address}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Ville</label>
-              <p className="text-gray-900">{profileData.city}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Region</label>
-              <p className="text-gray-900">{profileData.state}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Code postal
-              </label>
-              <p className="text-gray-900">{profileData.pincode}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Pays</label>
-              <p className="text-gray-900">{profileData.country}</p>
-            </div>
+          <div className="mt-5 grid gap-4">
+            <ProfileField
+              label="Numero d'inscription"
+              value={profileData.enrollmentNo}
+            />
+            <ProfileField label="Filiere" value={profileData.branchId?.name} />
+            <ProfileField
+              label="Semestre"
+              value={formatSemesterLabel(profileData.semester)}
+            />
           </div>
-        </div>
+        </section>
+      </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <section className="panel-section px-6 py-6 sm:px-8">
+          <h2 className="text-xl font-bold text-slate-900">Adresse</h2>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <ProfileField label="Adresse" value={profileData.address} />
+            <ProfileField label="Ville" value={profileData.city} />
+            <ProfileField label="Region" value={profileData.state} />
+            <ProfileField label="Code postal" value={profileData.pincode} />
+            <ProfileField label="Pays" value={profileData.country} />
+          </div>
+        </section>
+
+        <section className="panel-section px-6 py-6 sm:px-8">
+          <h2 className="text-xl font-bold text-slate-900">
             Contact d'urgence
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Nom</label>
-              <p className="text-gray-900">
-                {profileData.emergencyContact.name}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Lien</label>
-              <p className="text-gray-900">
-                {profileData.emergencyContact.relationship}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Telephone</label>
-              <p className="text-gray-900">
-                {profileData.emergencyContact.phone}
-              </p>
-            </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <ProfileField label="Nom" value={emergencyContact.name} />
+            <ProfileField label="Lien" value={emergencyContact.relationship} />
+            <ProfileField label="Telephone" value={emergencyContact.phone} />
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
 };
 
-export default Profile;
+export default StudentProfile;
