@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" role="img" aria-labelledby="title desc">
+  <title id="title">Logo de l'etablissement</title>
+  <desc id="desc">Embleme bicolore jaune et bleu avec devise en rouge.</desc>
+  <rect width="260" height="260" fill="#ffffff"/>
+
+  <g transform="translate(56 18)">
+    <path
+      d="M0 0H148V138C148 165 132 187 105 200L74 214L43 200C16 187 0 165 0 138V0Z"
+      fill="#ffffff"
+      stroke="#d9d9d9"
+      stroke-width="2"
+    />
+    <path d="M2 2H74V138C74 161 61 180 39 192L74 206V2Z" fill="#ffea2f"/>
+    <path d="M74 2H146V138C146 161 133 180 111 192L74 206V2Z" fill="#1486db"/>
+    <path d="M74 2V206" stroke="#ffffff" stroke-width="2"/>
+
+    <g fill="#1f1f1f" transform="translate(22 26)">
+      <path d="M20 0C31 4 40 11 48 21C38 17 29 10 20 0Z"/>
+      <path d="M28 14C39 18 48 25 56 35C46 31 37 24 28 14Z"/>
+      <path d="M21 27C32 31 41 38 49 48C39 44 30 37 21 27Z"/>
+      <path d="M15 40C27 44 36 51 43 61C33 57 24 50 15 40Z"/>
+      <path d="M10 53C21 57 30 64 37 74C27 70 18 63 10 53Z"/>
+    </g>
+
+    <g transform="translate(18 103)">
+      <path d="M0 18C11 10 23 8 35 18L41 37H-6Z" fill="#ffffff" stroke="#3b3b3b" stroke-width="1.5"/>
+      <path d="M7 20C14 14 21 12 28 20" fill="none" stroke="#3b3b3b" stroke-width="1.5"/>
+      <circle cx="18" cy="9" r="17" fill="#111111"/>
+      <circle cx="18" cy="9" r="9" fill="#ffea2f"/>
+      <circle cx="18" cy="9" r="4" fill="#111111"/>
+      <g fill="#111111">
+        <rect x="16.5" y="-12" width="3" height="7"/>
+        <rect x="16.5" y="23" width="3" height="7"/>
+        <rect x="-3" y="7.5" width="7" height="3"/>
+        <rect x="32" y="7.5" width="7" height="3"/>
+        <rect x="3.5" y="-5" width="6" height="3" transform="rotate(-45 6.5 -3.5)"/>
+        <rect x="27" y="18.5" width="6" height="3" transform="rotate(-45 30 20)"/>
+        <rect x="27" y="-5" width="6" height="3" transform="rotate(45 30 -3.5)"/>
+        <rect x="3.5" y="18.5" width="6" height="3" transform="rotate(45 6.5 20)"/>
+      </g>
+    </g>
+
+    <g transform="translate(88 35)">
+      <path d="M0 68H62" stroke="#111111" stroke-width="4"/>
+      <path d="M0 68V8" stroke="#111111" stroke-width="4"/>
+      <rect x="9" y="48" width="10" height="20" fill="#111111"/>
+      <rect x="25" y="38" width="10" height="30" fill="#111111"/>
+      <rect x="41" y="25" width="10" height="43" fill="#111111"/>
+      <path d="M7 34L21 26L32 30L49 12" fill="none" stroke="#111111" stroke-width="4"/>
+      <path d="M46 8H58V20" fill="none" stroke="#111111" stroke-width="4"/>
+      <path d="M50 8L58 8L58 16" fill="none" stroke="#111111" stroke-width="4"/>
+    </g>
+
+    <g transform="translate(86 112)" fill="none" stroke="#ffffff" stroke-width="6">
+      <path d="M0 0H54V16H36V34H54V50H18V34H0Z"/>
+      <path d="M18 0V16H0"/>
+      <path d="M18 16V50"/>
+      <path d="M36 16V50"/>
+    </g>
+  </g>
+
+  <g fill="#e11919" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="1">
+    <text transform="translate(26 204) rotate(-90)">EXCELLENCE</text>
+    <text transform="translate(232 56) rotate(90)">EMERGENCE</text>
+    <path id="bottom-arc" d="M44 216C81 246 179 246 216 216" fill="none"/>
+    <text font-size="14">
+      <textPath href="#bottom-arc" startOffset="50%" text-anchor="middle">EFFICIENCE</textPath>
+    </text>
+  </g>
+</svg>
