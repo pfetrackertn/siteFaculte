@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { MdOutlineDelete, MdEdit, MdLink } from "react-icons/md";
+import { toast } from "react-hot-toast";
+import { MdEdit, MdLink, MdOutlineDelete } from "react-icons/md";
 import { IoMdAdd, IoMdClose } from "react-icons/io";
-import Heading from "../../components/Heading";
-import toast from "react-hot-toast";
-import axiosWrapper from "../../utils/AxiosWrapper";
-import DeleteConfirm from "../../components/DeleteConfirm";
 import CustomButton from "../../components/CustomButton";
+import DeleteConfirm from "../../components/DeleteConfirm";
+import Heading from "../../components/Heading";
+import NoData from "../../components/NoData";
+import StatusBadge from "../../components/StatusBadge";
+import axiosWrapper from "../../utils/AxiosWrapper";
 import {
   formatSemesterLabel,
   getAcademicClassLabel,
 } from "../../utils/displayText";
+import { getSemesterOptions } from "../../utils/semesterOptions";
 
 const AddTimetableModal = ({
   isOpen,
@@ -37,32 +40,50 @@ const AddTimetableModal = ({
     });
   }, [initialData, isOpen]);
 
-  const filteredClasses = useMemo(() => {
-    return classes.filter((academicClass) => {
-      if (formData.branch && academicClass.branchId?._id !== formData.branch) {
-        return false;
-      }
+  const filteredClasses = useMemo(
+    () =>
+      classes.filter((academicClass) => {
+        if (formData.branch && academicClass.branchId?._id !== formData.branch) {
+          return false;
+        }
 
-      if (
-        formData.semester &&
-        Number(academicClass.semester) !== Number(formData.semester)
-      ) {
-        return false;
-      }
+        if (
+          formData.semester &&
+          Number(academicClass.semester) !== Number(formData.semester)
+        ) {
+          return false;
+        }
 
-      return true;
-    });
-  }, [classes, formData.branch, formData.semester]);
+        return true;
+      }),
+    [classes, formData.branch, formData.semester]
+  );
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) {
+  const selectedClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === formData.classId),
+    [classes, formData.classId]
+  );
+
+  const semesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedClass,
+        classes: filteredClasses,
+        currentValue: formData.semester,
+      }),
+    [filteredClasses, formData.semester, selectedClass]
+  );
+
+  const handleFileChange = (event) => {
+    const nextFile = event.target.files[0];
+    if (!nextFile) {
       return;
     }
+
     setFormData({
       ...formData,
-      file,
-      previewUrl: URL.createObjectURL(file),
+      file: nextFile,
+      previewUrl: URL.createObjectURL(nextFile),
     });
   };
 
@@ -74,96 +95,114 @@ const AddTimetableModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white p-8 rounded-lg w-[500px] max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold">
-            {initialData ? "Modifier l'emploi du temps" : "Ajouter un emploi du temps"}
-          </h2>
-          <button
+    <div className="modal-backdrop">
+      <div className="modal-card max-w-2xl">
+        <div className="modal-header">
+          <div>
+            <h2 className="section-title">
+              {initialData
+                ? "Modifier l'emploi du temps"
+                : "Ajouter un emploi du temps"}
+            </h2>
+            <p className="section-subtitle">
+              Associez le document au bon semestre, a la bonne filiere et a la
+              bonne classe si besoin.
+            </p>
+          </div>
+          <CustomButton
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            variant="secondary"
+            className="!rounded-xl !p-2.5"
           >
-            <IoMdClose className="text-3xl" />
-          </button>
+            <IoMdClose className="text-2xl" />
+          </CustomButton>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block mb-2">Filiere</label>
-            <select
-              value={formData.branch}
-              onChange={(e) =>
-                setFormData({ ...formData, branch: e.target.value })
-              }
-              className="w-full px-4 py-2 border rounded-md"
-            >
-              <option value="">Choisir une filiere</option>
-              {branches?.map((b) => (
-                <option key={b._id} value={b._id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+        <div className="modal-body space-y-5">
+          <div className="form-grid">
+            <div className="field-group">
+              <label className="field-label">Filiere</label>
+              <select
+                value={formData.branch}
+                onChange={(event) =>
+                  setFormData({ ...formData, branch: event.target.value, classId: "" })
+                }
+              >
+                <option value="">Choisir une filiere</option>
+                {branches?.map((branch) => (
+                  <option key={branch._id} value={branch._id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">Semestre</label>
+              <select
+                value={formData.semester}
+                onChange={(event) =>
+                  setFormData({
+                    ...formData,
+                    semester: event.target.value,
+                    classId: "",
+                  })
+                }
+              >
+                <option value="">Choisir un semestre</option>
+                {semesterOptions.map((sem) => (
+                  <option key={sem} value={sem}>
+                    {formatSemesterLabel(sem)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field-group md:col-span-2">
+              <label className="field-label">Classe</label>
+              <select
+                value={formData.classId}
+                onChange={(event) =>
+                  setFormData({ ...formData, classId: event.target.value })
+                }
+              >
+                <option value="">Aucune classe specifique</option>
+                {filteredClasses.map((academicClass) => (
+                  <option key={academicClass._id} value={academicClass._id}>
+                    {getAcademicClassLabel(academicClass)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label className="block mb-2">Semestre</label>
-            <select
-              value={formData.semester}
-              onChange={(e) =>
-                setFormData({ ...formData, semester: e.target.value })
-              }
-              className="w-full px-4 py-2 border rounded-md"
-            >
-              <option value="">Choisir un semestre</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                <option key={sem} value={sem}>
-                  {formatSemesterLabel(sem)}
-                </option>
-              ))}
-            </select>
+          <div className="field-group">
+            <label className="field-label">Fichier de l'emploi du temps</label>
+            <label className="upload-field cursor-pointer">
+              <span>{formData.file?.name || "Choisir une image"}</span>
+              <span className="badge badge-neutral">
+                {initialData ? "Optionnel" : "Requis"}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
           </div>
 
-          <div>
-            <label className="block mb-2">Classe</label>
-            <select
-              value={formData.classId}
-              onChange={(e) =>
-                setFormData({ ...formData, classId: e.target.value })
-              }
-              className="w-full px-4 py-2 border rounded-md"
-            >
-              <option value="">Aucune classe specifique</option>
-              {filteredClasses.map((academicClass) => (
-                <option key={academicClass._id} value={academicClass._id}>
-                  {getAcademicClassLabel(academicClass)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block mb-2">Fichier de l'emploi du temps</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="w-full"
-            />
-          </div>
-
-          {formData.previewUrl && (
-            <div className="mt-4">
+          {formData.previewUrl ? (
+            <div className="upload-preview">
               <img
                 src={formData.previewUrl}
                 alt="Apercu"
-                className="max-w-full h-auto"
+                className="max-h-[340px] w-full rounded-[22px] object-contain"
               />
             </div>
-          )}
+          ) : null}
 
-          <div className="flex justify-end gap-4 mt-6">
+          <div className="modal-footer">
             <CustomButton variant="secondary" onClick={onClose}>
               Annuler
             </CustomButton>
@@ -185,11 +224,16 @@ const Timetable = () => {
   const [selectedTimetableId, setSelectedTimetableId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTimetable, setEditingTimetable] = useState(null);
+  const [filters, setFilters] = useState({
+    branch: "",
+    semester: "",
+    classId: "",
+  });
   const userToken = localStorage.getItem("userToken");
 
   const getBranchHandler = useCallback(async () => {
     try {
-      const response = await axiosWrapper.get(`/branch`, {
+      const response = await axiosWrapper.get("/branch", {
         headers: {
           Authorization: `Bearer ${userToken}`,
         },
@@ -200,14 +244,16 @@ const Timetable = () => {
         toast.error(response.data.message);
       }
     } catch (error) {
-      console.error(error);
-      toast.error(error.response?.data?.message || "Erreur lors du chargement des filieres");
+      toast.error(
+        error.response?.data?.message ||
+          "Erreur lors du chargement des filieres"
+      );
     }
   }, [userToken]);
 
   const getTimetablesHandler = useCallback(async () => {
     try {
-      const response = await axiosWrapper.get(`/timetable`, {
+      const response = await axiosWrapper.get("/timetable", {
         headers: {
           Authorization: `Bearer ${userToken}`,
         },
@@ -218,7 +264,6 @@ const Timetable = () => {
         toast.error(response.data.message);
       }
     } catch (error) {
-      console.error(error);
       toast.error(
         error.response?.data?.message ||
           "Impossible de charger les emplois du temps"
@@ -228,7 +273,7 @@ const Timetable = () => {
 
   const getClassesHandler = useCallback(async () => {
     try {
-      const response = await axiosWrapper.get(`/class`, {
+      const response = await axiosWrapper.get("/class", {
         headers: {
           Authorization: `Bearer ${userToken}`,
         },
@@ -254,6 +299,65 @@ const Timetable = () => {
     getClassesHandler();
   }, [getBranchHandler, getClassesHandler, getTimetablesHandler]);
 
+  const filteredClasses = useMemo(
+    () =>
+      classes.filter((academicClass) => {
+        if (filters.branch && academicClass.branchId?._id !== filters.branch) {
+          return false;
+        }
+
+        if (
+          filters.semester &&
+          Number(academicClass.semester) !== Number(filters.semester)
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
+    [classes, filters.branch, filters.semester]
+  );
+
+  const selectedFilterClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === filters.classId),
+    [classes, filters.classId]
+  );
+
+  const filterSemesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedFilterClass,
+        classes: filteredClasses,
+        currentValue: filters.semester,
+      }),
+    [filteredClasses, filters.semester, selectedFilterClass]
+  );
+
+  const visibleTimetables = useMemo(
+    () =>
+      timetables.filter((item) => {
+        if (filters.branch && item.branch?._id !== filters.branch) {
+          return false;
+        }
+
+        if (
+          filters.semester &&
+          Number(item.semester) !== Number(filters.semester)
+        ) {
+          return false;
+        }
+
+        if (filters.classId) {
+          if (!item.classId?._id || item.classId._id !== filters.classId) {
+            return false;
+          }
+        }
+
+        return true;
+      }),
+    [filters.branch, filters.classId, filters.semester, timetables]
+  );
+
   const handleSubmitTimetable = async (formData) => {
     const headers = {
       "Content-Type": "multipart/form-data",
@@ -275,18 +379,15 @@ const Timetable = () => {
           : "Ajout de l'emploi du temps"
       );
 
-      let response;
-      if (editingTimetable) {
-        response = await axiosWrapper.put(
-          `/timetable/${editingTimetable._id}`,
-          submitData,
-          { headers }
-        );
-      } else {
-        response = await axiosWrapper.post("/timetable", submitData, {
-          headers,
-        });
-      }
+      const response = editingTimetable
+        ? await axiosWrapper.put(
+            `/timetable/${editingTimetable._id}`,
+            submitData,
+            { headers }
+          )
+        : await axiosWrapper.post("/timetable", submitData, {
+            headers,
+          });
 
       toast.dismiss();
       if (response.data.success) {
@@ -304,11 +405,6 @@ const Timetable = () => {
           "Une erreur est survenue avec l'emploi du temps"
       );
     }
-  };
-
-  const deleteTimetableHandler = async (id) => {
-    setIsDeleteConfirmOpen(true);
-    setSelectedTimetableId(id);
   };
 
   const confirmDelete = async () => {
@@ -353,66 +449,206 @@ const Timetable = () => {
   };
 
   return (
-    <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10 relative">
-      <div className="flex justify-between items-center w-full">
-        <Heading title="Gestion des emplois du temps" />
-        <CustomButton onClick={() => setShowAddModal(true)}>
-          <IoMdAdd className="text-2xl" />
+    <div className="screen-shell">
+      <div className="action-bar">
+        <Heading
+          title="Gestion des emplois du temps"
+          subtitle="Publiez des emplois du temps par semestre, filiere ou classe avec une structure uniforme."
+        />
+        <CustomButton
+          onClick={() => setShowAddModal(true)}
+          className="module-action-button"
+        >
+          <IoMdAdd className="text-xl" />
+          Nouvel emploi du temps
         </CustomButton>
       </div>
 
-      <div className="mt-8 w-full">
-        <table className="text-sm min-w-full bg-white">
-          <thead>
-              <tr className="bg-blue-500 text-white">
-              <th className="py-4 px-6 text-left font-semibold">Voir</th>
-              <th className="py-4 px-6 text-left font-semibold">Filiere</th>
-              <th className="py-4 px-6 text-left font-semibold">Semestre</th>
-              <th className="py-4 px-6 text-left font-semibold">Classe</th>
-              <th className="py-4 px-6 text-left font-semibold">Cree le</th>
-              <th className="py-4 px-6 text-center font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {timetables.map((item, index) => (
-              <tr key={index} className="border-b hover:bg-blue-50">
-                <td className="py-4 px-6">
-                  <a
-                    className="text-xl"
-                    href={process.env.REACT_APP_MEDIA_LINK + "/" + item.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <MdLink />
-                  </a>
-                </td>
-                <td className="py-4 px-6">{item.branch.name}</td>
-                <td className="py-4 px-6">{formatSemesterLabel(item.semester)}</td>
-                <td className="py-4 px-6">
-                  {item.classId ? getAcademicClassLabel(item.classId) : "Generale"}
-                </td>
-                <td className="py-4 px-6">
-                  {new Date(item.createdAt).toLocaleDateString()}
-                </td>
-                <td className="py-4 px-6 text-center flex justify-center gap-4">
-                  <CustomButton
-                    variant="secondary"
-                    onClick={() => editTimetableHandler(item)}
-                  >
-                    <MdEdit />
-                  </CustomButton>
-                  <CustomButton
-                    variant="danger"
-                    onClick={() => deleteTimetableHandler(item._id)}
-                  >
-                    <MdOutlineDelete />
-                  </CustomButton>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="metric-grid">
+        <div className="metric-card metric-card-primary">
+          <p className="metric-label">Documents</p>
+          <p className="metric-value">{timetables.length}</p>
+        </div>
+        <div className="metric-card metric-card-success">
+          <p className="metric-label">Generaux</p>
+          <p className="metric-value">
+            {timetables.filter((item) => !item.classId).length}
+          </p>
+        </div>
+        <div className="metric-card metric-card-warning">
+          <p className="metric-label">Classes ciblees</p>
+          <p className="metric-value">
+            {timetables.filter((item) => item.classId).length}
+          </p>
+        </div>
       </div>
+
+      <div className="filter-card">
+        <div className="section-header">
+          <p className="section-kicker">Filtres</p>
+          <h2 className="section-title">Affiner les emplois du temps</h2>
+        </div>
+
+        <div className="mt-5 filter-grid-3">
+          <div className="field-group">
+            <label className="field-label">Filiere</label>
+            <select
+              value={filters.branch}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  branch: event.target.value,
+                  classId: "",
+                }))
+              }
+            >
+              <option value="">Toutes les filieres</option>
+              {branch.map((item) => (
+                <option key={item._id} value={item._id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Semestre</label>
+            <select
+              value={filters.semester}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  semester: event.target.value,
+                  classId: "",
+                }))
+              }
+            >
+              <option value="">Tous les semestres</option>
+              {filterSemesterOptions.map((sem) => (
+                <option key={sem} value={sem}>
+                  {formatSemesterLabel(sem)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Classe</label>
+            <select
+              value={filters.classId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  classId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Toutes les classes</option>
+              {filteredClasses.map((academicClass) => (
+                <option key={academicClass._id} value={academicClass._id}>
+                  {getAcademicClassLabel(academicClass)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {timetables.length === 0 ? (
+        <NoData
+          title="Aucun emploi du temps publie"
+          description="Ajoutez un premier document pour organiser les cours et les examens."
+        />
+      ) : visibleTimetables.length === 0 ? (
+        <NoData
+          title="Aucun resultat"
+          description="Aucun emploi du temps ne correspond aux filtres selectionnes."
+        />
+      ) : (
+        <div className="table-shell">
+          <div className="table-toolbar">
+            <div className="section-header">
+              <p className="section-kicker">Documents</p>
+              <h2 className="section-title">Emplois du temps disponibles</h2>
+              <p className="section-subtitle">
+                Consultez, modifiez ou supprimez les publications selon la
+                filiere, le semestre et la classe.
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th>Voir</th>
+                  <th>Filiere</th>
+                  <th>Semestre</th>
+                  <th>Classe</th>
+                  <th>Cree le</th>
+                  <th className="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTimetables.map((item) => (
+                  <tr key={item._id}>
+                    <td>
+                      <CustomButton
+                        variant="primary"
+                        className="!p-2.5"
+                        onClick={() =>
+                          window.open(
+                            `${process.env.REACT_APP_MEDIA_LINK}/${item.link}`,
+                            "_blank"
+                          )
+                        }
+                      >
+                        <MdLink className="text-lg" />
+                      </CustomButton>
+                    </td>
+                    <td className="font-semibold text-slate-900">
+                      {item.branch.name}
+                    </td>
+                    <td>
+                      <StatusBadge tone="primary">
+                        {formatSemesterLabel(item.semester)}
+                      </StatusBadge>
+                    </td>
+                    <td>
+                      {item.classId
+                        ? getAcademicClassLabel(item.classId)
+                        : "Generale"}
+                    </td>
+                    <td>
+                      {new Date(item.createdAt).toLocaleDateString("fr-FR")}
+                    </td>
+                    <td>
+                      <div className="table-action-group">
+                        <CustomButton
+                          variant="secondary"
+                          className="!p-2.5"
+                          onClick={() => editTimetableHandler(item)}
+                        >
+                          <MdEdit />
+                        </CustomButton>
+                        <CustomButton
+                          variant="danger"
+                          className="!p-2.5"
+                          onClick={() => {
+                            setIsDeleteConfirmOpen(true);
+                            setSelectedTimetableId(item._id);
+                          }}
+                        >
+                          <MdOutlineDelete />
+                        </CustomButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <AddTimetableModal
         isOpen={showAddModal}

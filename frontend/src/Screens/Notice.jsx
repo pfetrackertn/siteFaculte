@@ -21,6 +21,10 @@ const Notice = () => {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedNoticeId, setSelectedNoticeId] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [filters, setFilters] = useState({
+    search: "",
+    type: "",
+  });
   const token = localStorage.getItem("userToken");
   const currentUserType = (localStorage.getItem("userType") || "").toLowerCase();
   const canManageNotices =
@@ -79,6 +83,36 @@ const Notice = () => {
       (notice) => notice.type === "both" || notice.type === currentUserType
     );
   }, [currentUserType, notices]);
+
+  const filteredNotices = useMemo(() => {
+    return visibleNotices.filter((notice) => {
+      const matchesSearch = filters.search
+        ? [notice.title, notice.description, notice.link]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(filters.search.toLowerCase())
+        : true;
+      const matchesType = filters.type ? notice.type === filters.type : true;
+
+      return matchesSearch && matchesType;
+    });
+  }, [filters, visibleNotices]);
+
+  const stats = useMemo(
+    () => [
+      { label: "Annonces", value: notices.length },
+      {
+        label: "Tous publics",
+        value: notices.filter((notice) => notice.type === "both").length,
+      },
+      {
+        label: "Avec lien",
+        value: notices.filter((notice) => Boolean(notice.link)).length,
+      },
+    ],
+    [notices]
+  );
 
   const openAddModal = () => {
     setEditingNotice(null);
@@ -169,18 +203,74 @@ const Notice = () => {
   };
 
   return (
-    <div className="w-full px-2 py-6 sm:px-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="screen-shell">
+      <div className="action-bar">
         <Heading
           title="Annonces"
           subtitle="Consultez ou publiez les communications importantes de l'etablissement."
         />
         {canManageNotices && !dataLoading && (
-          <CustomButton onClick={openAddModal} className="self-start sm:self-auto">
+          <CustomButton
+            onClick={openAddModal}
+            className="module-action-button"
+          >
             <IoMdAdd className="text-xl" />
             Nouvelle annonce
           </CustomButton>
         )}
+      </div>
+
+      <div className="metric-grid">
+        {stats.map((stat) => (
+          <div key={stat.label} className="panel-section px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {stat.label}
+            </p>
+            <p className="mt-3 text-3xl font-extrabold text-slate-900">
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="filter-card">
+        <div className="section-header">
+          <p className="section-kicker">Filtres</p>
+          <h2 className="section-title">Affiner les annonces</h2>
+        </div>
+        <div className="mt-5 filter-grid-2">
+          <div className="field-group">
+            <label className="field-label">Recherche</label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  search: event.target.value,
+                }))
+              }
+              placeholder="Titre, contenu ou lien"
+            />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Public</label>
+            <select
+              value={filters.type}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  type: event.target.value,
+                }))
+              }
+            >
+              <option value="">Tous</option>
+              <option value="student">Etudiants</option>
+              <option value="faculty">Enseignants</option>
+              <option value="both">Tous les publics</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {dataLoading ? (
@@ -192,9 +282,14 @@ const Notice = () => {
           title="Aucune annonce disponible"
           description="Les nouvelles annonces apparaitront ici des qu'elles seront publiees."
         />
+      ) : filteredNotices.length === 0 ? (
+        <NoData
+          title="Aucun resultat"
+          description="Aucune annonce ne correspond aux filtres selectionnes."
+        />
       ) : (
         <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {visibleNotices.map((notice) => (
+          {filteredNotices.map((notice) => (
             <article
               key={notice._id}
               className="group flex h-full flex-col rounded-[28px] border border-slate-200/80 bg-white/95 p-6 shadow-[0_18px_50px_-34px_rgba(15,23,42,0.35)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_24px_60px_-34px_rgba(37,99,235,0.35)]"
@@ -272,8 +367,8 @@ const Notice = () => {
 
       {showAddModal && (
         <div className="modal-backdrop">
-          <div className="modal-card max-w-2xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-6 py-5 sm:px-8">
+          <div className="modal-card max-w-2xl">
+            <div className="modal-header">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
                   {editingNotice
@@ -295,9 +390,10 @@ const Notice = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitNotice} className="space-y-5 px-6 py-6 sm:px-8">
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
+            <form onSubmit={handleSubmitNotice}>
+              <div className="modal-body space-y-5">
+                <div className="field-group">
+                  <label className="field-label">
                   Titre de l'annonce
                 </label>
                 <input
@@ -310,8 +406,8 @@ const Notice = () => {
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                <div className="field-group">
+                  <label className="field-label">
                   Description de l'annonce
                 </label>
                 <textarea
@@ -324,9 +420,9 @@ const Notice = () => {
                 />
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                <div className="form-grid">
+                  <div className="field-group">
+                    <label className="field-label">
                     Public concerne
                   </label>
                   <select
@@ -342,8 +438,8 @@ const Notice = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  <div className="field-group">
+                    <label className="field-label">
                     Lien associe (optionnel)
                   </label>
                   <input
@@ -357,7 +453,9 @@ const Notice = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-5">
+              </div>
+
+              <div className="modal-footer">
                 <CustomButton
                   variant="secondary"
                   onClick={() => {

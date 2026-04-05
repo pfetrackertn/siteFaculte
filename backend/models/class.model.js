@@ -19,6 +19,26 @@ const academicClassSchema = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      default: null,
+    },
+    academicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicYear",
+      default: null,
+    },
+    level: {
+      type: String,
+      enum: ["L1", "L2", "L3", "M1", "M2"],
+      default: "L1",
+    },
+    programType: {
+      type: String,
+      enum: ["licence", "master"],
+      default: "licence",
+    },
     semester: {
       type: Number,
       required: true,
@@ -40,12 +60,26 @@ const academicClassSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archiveReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
   },
   { timestamps: true }
 );
 
 academicClassSchema.index(
-  { name: 1, branchId: 1, semester: 1 },
+  { name: 1, branchId: 1, semester: 1, academicYearId: 1 },
   { unique: true }
 );
 

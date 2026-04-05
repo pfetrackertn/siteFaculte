@@ -13,16 +13,34 @@ const {
 } = require("../../controllers/details/admin-details.controller");
 const upload = require("../../middlewares/multer.middleware");
 const auth = require("../../middlewares/auth.middleware");
+const { allowRoles } = require("../../middlewares/role.middleware");
 
-router.post("/register", upload.single("file"), registerAdminController);
+router.post(
+  "/register",
+  auth,
+  allowRoles("admin"),
+  upload.single("file"),
+  registerAdminController
+);
 router.post("/login", loginAdminController);
-router.get("/my-details", auth, getMyDetailsController);
+router.get("/my-details", auth, allowRoles("admin"), getMyDetailsController);
 
-router.get("/", auth, getAllDetailsController);
-router.patch("/:id", auth, upload.single("file"), updateDetailsController);
-router.delete("/:id", auth, deleteDetailsController);
+router.get("/", auth, allowRoles("admin"), getAllDetailsController);
+router.patch(
+  "/:id",
+  auth,
+  allowRoles("admin"),
+  upload.single("file"),
+  updateDetailsController
+);
+router.delete("/:id", auth, allowRoles("admin"), deleteDetailsController);
 router.post("/forget-password", sendForgetPasswordEmail);
 router.post("/update-password/:resetId", updatePasswordHandler);
-router.post("/change-password", auth, updateLoggedInPasswordController);
+router.post(
+  "/change-password",
+  auth,
+  allowRoles("admin"),
+  updateLoggedInPasswordController
+);
 
 module.exports = router;

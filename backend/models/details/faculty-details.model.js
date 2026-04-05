@@ -85,6 +85,36 @@ const facultyDetailsSchema = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      default: null,
+    },
+    academicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicYear",
+      default: null,
+    },
+    assignedClassIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AcademicClass",
+      },
+    ],
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archiveReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     password: {
       type: String,
       required: true,
@@ -95,9 +125,10 @@ const facultyDetailsSchema = new mongoose.Schema(
 
 facultyDetailsSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
-    next();
+    return next();
   }
   this.password = await bcrypt.hash(this.password, 10);
+  return next();
 });
 
 const facultyDetails = mongoose.model("FacultyDetail", facultyDetailsSchema);

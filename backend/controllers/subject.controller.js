@@ -1,103 +1,162 @@
 const Subject = require("../models/subject.model");
+const AcademicClass = require("../models/class.model");
+const Branch = require("../models/branch.model");
 const ApiResponse = require("../utils/ApiResponse");
+const { getArchiveFilter, buildArchiveUpdate } = require("../utils/archive");
+const { resolveAcademicYearId } = require("../utils/academic-year");
+
+const populateSubject = (query) =>
+  query
+    .populate("branch", "name branchId")
+    .populate("departmentId", "name code")
+    .populate("classId", "name code level semester")
+    .populate("academicYearId", "name isActive");
 
 const getSubjectController = async (req, res) => {
   try {
-    const { branch, semester } = req.query;
-    let query = {};
+    const { branch, semester, classId, academicYearId } = req.query;
+    const query = {
+      ...getArchiveFilter(req.query),
+    };
+
     if (branch) query.branch = branch;
-    if (semester) query.semester = semester;
-    let subjects = await Subject.find(query).populate("branch");
-    if (!subjects || subjects.length === 0) {
-      return ApiResponse.error("Aucune matiere trouvee", 404).send(res);
+    if (semester) query.semester = Number(semester);
+    if (classId) query.classId = classId;
+    if (academicYearId) query.academicYearId = academicYearId;
+
+    const subjects = await populateSubject(
+      Subject.find(query).sort({ semester: 1, name: 1 })
+    );
+
+    if (!subjects.length) {
+      return ApiResponse.notFound("Aucune matiere trouvee").send(res);
     }
+
     return ApiResponse.success(subjects, "Matieres chargees avec succes").send(
       res
     );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Get Subject Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
 const addSubjectController = async (req, res) => {
-  const { name, code, branch, semester, credits } = req.body;
-
-  if (!name || !code || !branch || !semester || !credits) {
-    return ApiResponse.error("Tous les champs sont obligatoires", 400).send(
-      res
-    );
-  }
-
   try {
-    let subject = await Subject.findOne({ code });
+    const { name, code, branch, semester, credits, classId = null } = req.body;
+
+    if (!name || !code || !branch || !semester || !credits) {
+      return ApiResponse.badRequest("Tous les champs sont obligatoires").send(
+        res
+      );
+    }
+
+    const branchDoc = await Branch.findById(branch);
+    if (!branchDoc) {
+      return ApiResponse.notFound("Filiere introuvable").send(res);
+    }
+
+    let academicClass = null;
+    if (classId) {
+      academicClass = await AcademicClass.findById(classId);
+      if (!academicClass) {
+        return ApiResponse.notFound("Classe introuvable").send(res);
+      }
+    }
+
+    const academicYearId = await resolveAcademicYearId(req.body.academicYearId);
+    const normalizedCode = code.trim().toUpperCase();
+
+    const subject = await Subject.findOne({
+      code: normalizedCode,
+      branch,
+      semester: Number(semester),
+      academicYearId: academicYearId || null,
+      isArchived: false,
+    });
+
     if (subject) {
-      return ApiResponse.error("Cette matiere existe deja", 409).send(res);
+      return ApiResponse.conflict("Cette matiere existe deja").send(res);
     }
 
     const newSubject = await Subject.create({
-      name,
-      code,
+      name: name.trim(),
+      code: normalizedCode,
       branch,
-      semester,
-      credits,
+      departmentId: req.body.departmentId || branchDoc.departmentId || null,
+      classId: classId || null,
+      academicYearId:
+        academicYearId || academicClass?.academicYearId || null,
+      semester: Number(semester),
+      credits: Number(credits),
+      status: req.body.status || "active",
     });
 
-    return ApiResponse.created(newSubject, "Matiere ajoutee avec succes").send(
-      res
-    );
+    const populatedSubject = await populateSubject(Subject.findById(newSubject._id));
+
+    return ApiResponse.created(
+      populatedSubject,
+      "Matiere ajoutee avec succes"
+    ).send(res);
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Add Subject Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
 const updateSubjectController = async (req, res) => {
-  const { name, code, branch, semester, credits } = req.body;
-  const updateFields = {};
-
-  if (name) updateFields.name = name;
-  if (code) updateFields.code = code;
-  if (branch) updateFields.branch = branch;
-  if (semester) updateFields.semester = semester;
-  if (credits) updateFields.credits = credits;
-
-  if (Object.keys(updateFields).length === 0) {
-    return ApiResponse.error(
-      "Aucun champ n'a ete fourni pour la mise a jour",
-      400
-    ).send(res);
-  }
-
   try {
-    let subject = await Subject.findByIdAndUpdate(req.params.id, updateFields, {
-      new: true,
-    });
+    const subject = await Subject.findById(req.params.id);
 
     if (!subject) {
-      return ApiResponse.error("Matiere introuvable", 404).send(res);
+      return ApiResponse.notFound("Matiere introuvable").send(res);
     }
 
-    return ApiResponse.success(subject, "Matiere mise a jour avec succes").send(
-      res
+    const updateFields = { ...req.body };
+
+    if (updateFields.name) updateFields.name = updateFields.name.trim();
+    if (updateFields.code) updateFields.code = updateFields.code.trim().toUpperCase();
+    if (updateFields.semester) updateFields.semester = Number(updateFields.semester);
+    if (updateFields.credits) updateFields.credits = Number(updateFields.credits);
+
+    if (Object.prototype.hasOwnProperty.call(updateFields, "academicYearId")) {
+      updateFields.academicYearId = await resolveAcademicYearId(
+        updateFields.academicYearId
+      );
+    }
+
+    const updatedSubject = await populateSubject(
+      Subject.findByIdAndUpdate(req.params.id, updateFields, { new: true })
     );
+
+    return ApiResponse.success(
+      updatedSubject,
+      "Matiere mise a jour avec succes"
+    ).send(res);
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Update Subject Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
 const deleteSubjectController = async (req, res) => {
   try {
-    if (!req.params.id) {
-      return ApiResponse.error("L'identifiant de la matiere est requis", 400)
-        .send(res);
+    const subject = await Subject.findByIdAndUpdate(
+      req.params.id,
+      buildArchiveUpdate(true, "Suppression logique depuis le module admin"),
+      { new: true }
+    );
+
+    if (!subject) {
+      return ApiResponse.notFound("Matiere introuvable").send(res);
     }
 
-    let subject = await Subject.findByIdAndDelete(req.params.id);
-    if (!subject) {
-      return ApiResponse.error("Matiere introuvable", 404).send(res);
-    }
-    return ApiResponse.success(null, "Matiere supprimee avec succes").send(res);
+    return ApiResponse.success(subject, "Matiere archivee avec succes").send(
+      res
+    );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Delete Subject Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 

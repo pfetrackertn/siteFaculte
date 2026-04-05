@@ -1,18 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FiUpload, FiEdit2, FiTrash2 } from "react-icons/fi";
-import Heading from "../../components/Heading";
-import { AiOutlineClose } from "react-icons/ai";
 import toast from "react-hot-toast";
-import axiosWrapper from "../../utils/AxiosWrapper";
-import DeleteConfirm from "../../components/DeleteConfirm";
-import CustomButton from "../../components/CustomButton";
-import { MdLink } from "react-icons/md";
+import { AiOutlineClose } from "react-icons/ai";
+import { FiEdit2, FiTrash2, FiUpload } from "react-icons/fi";
 import { IoMdAdd } from "react-icons/io";
+import { MdLink } from "react-icons/md";
+import CustomButton from "../../components/CustomButton";
+import DeleteConfirm from "../../components/DeleteConfirm";
+import Heading from "../../components/Heading";
+import NoData from "../../components/NoData";
+import StatusBadge from "../../components/StatusBadge";
+import axiosWrapper from "../../utils/AxiosWrapper";
 import {
   formatSemesterLabel,
   getAcademicClassLabel,
   getMaterialTypeLabel,
 } from "../../utils/displayText";
+import { getSemesterOptions } from "../../utils/semesterOptions";
+
+const INITIAL_FORM_DATA = {
+  title: "",
+  subject: "",
+  semester: "",
+  branch: "",
+  classId: "",
+  type: "notes",
+};
+
 const Material = () => {
   const [materials, setMaterials] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -23,14 +36,7 @@ const Material = () => {
   const [editingMaterial, setEditingMaterial] = useState(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState(null);
-  const [formData, setFormData] = useState({
-    title: "",
-    subject: "",
-    semester: "",
-    branch: "",
-    classId: "",
-    type: "notes",
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [file, setFile] = useState(null);
   const [filters, setFilters] = useState({
     subject: "",
@@ -43,7 +49,6 @@ const Material = () => {
 
   const fetchSubjects = useCallback(async () => {
     try {
-      toast.loading("Chargement des matieres...");
       const response = await axiosWrapper.get("/subject", {
         headers: {
           "Content-Type": "application/json",
@@ -58,17 +63,15 @@ const Material = () => {
         setSubjects([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Impossible de charger les matieres"
+          error?.response?.data?.message ||
+            "Impossible de charger les matieres"
         );
       }
-    } finally {
-      toast.dismiss();
     }
   }, [userToken]);
 
   const fetchBranches = useCallback(async () => {
     try {
-      toast.loading("Chargement des filieres...");
       const response = await axiosWrapper.get("/branch", {
         headers: {
           "Content-Type": "application/json",
@@ -83,11 +86,10 @@ const Material = () => {
         setBranches([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Impossible de charger les filieres"
+          error?.response?.data?.message ||
+            "Impossible de charger les filieres"
         );
       }
-    } finally {
-      toast.dismiss();
     }
   }, [userToken]);
 
@@ -107,7 +109,8 @@ const Material = () => {
         setClasses([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Impossible de charger les classes"
+          error?.response?.data?.message ||
+            "Impossible de charger les classes"
         );
       }
     }
@@ -115,7 +118,7 @@ const Material = () => {
 
   const fetchMaterials = useCallback(async () => {
     try {
-      toast.loading("Chargement des ressources...");
+      setDataLoading(true);
       const queryParams = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
         if (value) queryParams.append(key, value);
@@ -135,11 +138,12 @@ const Material = () => {
         setMaterials([]);
       } else {
         toast.error(
-          error?.response?.data?.message || "Impossible de charger les ressources"
+          error?.response?.data?.message ||
+            "Impossible de charger les ressources"
         );
       }
     } finally {
-      toast.dismiss();
+      setDataLoading(false);
     }
   }, [filters, userToken]);
 
@@ -149,46 +153,96 @@ const Material = () => {
     fetchClasses();
   }, [fetchBranches, fetchClasses, fetchSubjects]);
 
-  const filteredFormClasses = useMemo(() => {
-    return classes.filter((academicClass) => {
-      if (formData.branch && academicClass.branchId?._id !== formData.branch) {
-        return false;
-      }
-
-      if (
-        formData.semester &&
-        Number(academicClass.semester) !== Number(formData.semester)
-      ) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [classes, formData.branch, formData.semester]);
-
-  const filteredClasses = useMemo(() => {
-    return classes.filter((academicClass) => {
-      if (filters.branch && academicClass.branchId?._id !== filters.branch) {
-        return false;
-      }
-
-      if (
-        filters.semester &&
-        Number(academicClass.semester) !== Number(filters.semester)
-      ) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [classes, filters.branch, filters.semester]);
-
   useEffect(() => {
     fetchMaterials();
   }, [fetchMaterials]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  const filteredFormClasses = useMemo(
+    () =>
+      classes.filter((academicClass) => {
+        if (formData.branch && academicClass.branchId?._id !== formData.branch) {
+          return false;
+        }
+
+        if (
+          formData.semester &&
+          Number(academicClass.semester) !== Number(formData.semester)
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
+    [classes, formData.branch, formData.semester]
+  );
+
+  const filteredClasses = useMemo(
+    () =>
+      classes.filter((academicClass) => {
+        if (filters.branch && academicClass.branchId?._id !== filters.branch) {
+          return false;
+        }
+
+        if (
+          filters.semester &&
+          Number(academicClass.semester) !== Number(filters.semester)
+        ) {
+          return false;
+        }
+
+        return true;
+      }),
+    [classes, filters.branch, filters.semester]
+  );
+
+  const selectedFormClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === formData.classId),
+    [classes, formData.classId]
+  );
+
+  const selectedFilterClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === filters.classId),
+    [classes, filters.classId]
+  );
+
+  const formSemesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedFormClass,
+        classes: filteredFormClasses,
+        currentValue: formData.semester,
+      }),
+    [filteredFormClasses, formData.semester, selectedFormClass]
+  );
+
+  const filterSemesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedFilterClass,
+        classes: filteredClasses,
+        currentValue: filters.semester,
+      }),
+    [filteredClasses, filters.semester, selectedFilterClass]
+  );
+
+  const stats = useMemo(
+    () => [
+      { label: "Ressources", value: materials.length },
+      {
+        label: "Matieres",
+        value: new Set(materials.map((material) => material.subject?._id).filter(Boolean))
+          .size,
+      },
+      {
+        label: "Types",
+        value: new Set(materials.map((material) => material.type).filter(Boolean)).size,
+      },
+    ],
+    [materials]
+  );
+
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -196,8 +250,8 @@ const Material = () => {
     }));
   };
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
     setFilters((prev) => ({
       ...prev,
       [name]: value,
@@ -205,25 +259,19 @@ const Material = () => {
     }));
   };
 
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
+  const handleFileChange = (event) => {
+    setFile(event.target.files[0]);
   };
 
   const resetForm = () => {
-    setFormData({
-      title: "",
-      subject: "",
-      semester: "",
-      branch: "",
-      classId: "",
-      type: "notes",
-    });
+    setFormData(INITIAL_FORM_DATA);
     setFile(null);
     setEditingMaterial(null);
+    setShowModal(false);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setDataLoading(true);
     toast.loading(
       editingMaterial
@@ -258,7 +306,6 @@ const Material = () => {
         toast.success("Ressource ajoutee avec succes");
       }
 
-      setShowModal(false);
       resetForm();
       fetchMaterials();
     } catch (error) {
@@ -302,26 +349,46 @@ const Material = () => {
   };
 
   return (
-    <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
-      <div className="flex justify-between items-center w-full">
-        <Heading title="Gestion des ressources" />
-        <CustomButton onClick={() => setShowModal(true)}>
-          <IoMdAdd className="text-2xl" />
+    <div className="screen-shell">
+      <div className="action-bar">
+        <Heading
+          title="Gestion des ressources"
+          subtitle="Diffusez des supports de cours avec une presentation unifiee pour les enseignants et les etudiants."
+        />
+        <CustomButton
+          onClick={() => setShowModal(true)}
+          className="module-action-button"
+        >
+          <IoMdAdd className="text-xl" />
+          Nouvelle ressource
         </CustomButton>
       </div>
 
-      {/* Filters */}
-      <div className="w-full mt-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filtrer par matiere
-              </label>
+      <div className="metric-grid">
+        {stats.map((stat) => (
+          <div key={stat.label} className="panel-section px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {stat.label}
+            </p>
+            <p className="mt-3 text-3xl font-extrabold text-slate-900">
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="filter-card">
+        <div className="section-header">
+          <p className="section-kicker">Filtres</p>
+          <h2 className="section-title">Affiner les ressources</h2>
+        </div>
+        <div className="mt-5 filter-grid-5">
+          <div className="field-group">
+            <label className="field-label">Matiere</label>
             <select
               name="subject"
               value={filters.subject}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Toutes les matieres</option>
               {subjects.map((subject) => (
@@ -332,15 +399,12 @@ const Material = () => {
             </select>
           </div>
 
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filtrer par filiere
-              </label>
+          <div className="field-group">
+            <label className="field-label">Filiere</label>
             <select
               name="branch"
               value={filters.branch}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Toutes les filieres</option>
               {branches.map((branch) => (
@@ -351,18 +415,15 @@ const Material = () => {
             </select>
           </div>
 
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filtrer par semestre
-              </label>
+          <div className="field-group">
+            <label className="field-label">Semestre</label>
             <select
               name="semester"
               value={filters.semester}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Tous les semestres</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+              {filterSemesterOptions.map((sem) => (
                 <option key={sem} value={sem}>
                   {formatSemesterLabel(sem)}
                 </option>
@@ -370,15 +431,12 @@ const Material = () => {
             </select>
           </div>
 
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filtrer par classe
-              </label>
+          <div className="field-group">
+            <label className="field-label">Classe</label>
             <select
               name="classId"
               value={filters.classId}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Toutes les classes</option>
               {filteredClasses.map((academicClass) => (
@@ -389,15 +447,12 @@ const Material = () => {
             </select>
           </div>
 
-          <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filtrer par type
-              </label>
+          <div className="field-group">
+            <label className="field-label">Type</label>
             <select
               name="type"
               value={filters.type}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Tous les types</option>
               <option value="notes">Notes de cours</option>
@@ -409,217 +464,228 @@ const Material = () => {
         </div>
       </div>
 
-      {/* Materials Table */}
-      <div className="w-full mt-8 overflow-x-auto">
-        {materials.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            Aucune ressource trouvee
+      {dataLoading ? (
+        <div className="content-card">
+          <p className="text-sm text-slate-500">Chargement des ressources...</p>
+        </div>
+      ) : materials.length === 0 ? (
+        <NoData
+          title="Aucune ressource trouvee"
+          description="Ajoutez une premiere ressource pour enrichir la bibliotheque pedagogique."
+        />
+      ) : (
+        <div className="table-shell">
+          <div className="table-toolbar">
+            <div className="section-header">
+              <p className="section-kicker">Catalogue</p>
+              <h2 className="section-title">Ressources publiees</h2>
+            </div>
           </div>
-        ) : (
-          <table className="text-sm min-w-full bg-white">
-            <thead>
-              <tr className="bg-blue-500 text-white">
-                <th className="py-4 px-6 text-left font-semibold">Fichier</th>
-                <th className="py-4 px-6 text-left font-semibold">Titre</th>
-                <th className="py-4 px-6 text-left font-semibold">Matiere</th>
-                <th className="py-4 px-6 text-left font-semibold">Semestre</th>
-                <th className="py-4 px-6 text-left font-semibold">Filiere</th>
-                <th className="py-4 px-6 text-left font-semibold">Classe</th>
-                <th className="py-4 px-6 text-left font-semibold">Type</th>
-                <th className="py-4 px-6 text-left font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {materials.map((material) => (
-                <tr key={material._id} className="border-b hover:bg-blue-50">
-                  <td className="py-4 px-6">
-                    <CustomButton
-                      variant="primary"
-                      onClick={() => {
-                        window.open(
-                          `${process.env.REACT_APP_MEDIA_LINK}/${material.file}`
-                        );
-                      }}
-                    >
-                      <MdLink className="text-xl" />
-                    </CustomButton>
-                  </td>
-                  <td className="py-4 px-6">{material.title}</td>
-                  <td className="py-4 px-6">{material.subject.name}</td>
-                  <td className="py-4 px-6">{formatSemesterLabel(material.semester)}</td>
-                  <td className="py-4 px-6">{material.branch.name}</td>
-                  <td className="py-4 px-6">
-                    {material.classId
-                      ? getAcademicClassLabel(material.classId)
-                      : "Generale"}
-                  </td>
-                  <td className="py-4 px-6">{getMaterialTypeLabel(material.type)}</td>
-                  <td className="py-4 px-6">
-                    <div className="flex gap-4">
-                      <CustomButton
-                        variant="secondary"
-                        onClick={() => handleEdit(material)}
-                      >
-                        <FiEdit2 />
-                      </CustomButton>
-                      <CustomButton
-                        variant="danger"
-                        onClick={() => {
-                          setSelectedMaterialId(material._id);
-                          setIsDeleteConfirmOpen(true);
-                        }}
-                      >
-                        <FiTrash2 />
-                      </CustomButton>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th>Fichier</th>
+                  <th>Titre</th>
+                  <th>Matiere</th>
+                  <th>Semestre</th>
+                  <th>Filiere</th>
+                  <th>Classe</th>
+                  <th>Type</th>
+                  <th className="text-center">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {materials.map((material) => (
+                  <tr key={material._id}>
+                    <td>
+                      <CustomButton
+                        variant="primary"
+                        className="!p-2.5"
+                        onClick={() =>
+                          window.open(
+                            `${process.env.REACT_APP_MEDIA_LINK}/${material.file}`
+                          )
+                        }
+                      >
+                        <MdLink className="text-lg" />
+                      </CustomButton>
+                    </td>
+                    <td className="font-semibold text-slate-900">
+                      {material.title}
+                    </td>
+                    <td>{material.subject.name}</td>
+                    <td>{formatSemesterLabel(material.semester)}</td>
+                    <td>{material.branch.name}</td>
+                    <td>
+                      {material.classId
+                        ? getAcademicClassLabel(material.classId)
+                        : "Generale"}
+                    </td>
+                    <td>
+                      <StatusBadge tone="neutral">
+                        {getMaterialTypeLabel(material.type)}
+                      </StatusBadge>
+                    </td>
+                    <td>
+                      <div className="table-action-group">
+                        <CustomButton
+                          variant="secondary"
+                          className="!p-2.5"
+                          onClick={() => handleEdit(material)}
+                        >
+                          <FiEdit2 />
+                        </CustomButton>
+                        <CustomButton
+                          variant="danger"
+                          className="!p-2.5"
+                          onClick={() => {
+                            setSelectedMaterialId(material._id);
+                            setIsDeleteConfirmOpen(true);
+                          }}
+                        >
+                          <FiTrash2 />
+                        </CustomButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-      {/* Add/Edit Material Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">
-                {editingMaterial ? "Modifier la ressource" : "Ajouter une ressource"}
-              </h2>
+      {showModal ? (
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-3xl">
+            <div className="modal-header">
+              <div>
+                <h2 className="section-title">
+                  {editingMaterial
+                    ? "Modifier la ressource"
+                    : "Ajouter une ressource"}
+                </h2>
+                <p className="section-subtitle">
+                  Associez la ressource a la bonne filiere, au bon semestre et
+                  eventuellement a une classe.
+                </p>
+              </div>
               <CustomButton
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
+                onClick={resetForm}
                 variant="secondary"
+                className="!rounded-xl !p-2.5"
               >
-                <AiOutlineClose size={24} />
+                <AiOutlineClose size={22} />
               </CustomButton>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Titre
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Matiere
-                  </label>
-                  <select
-                    name="subject"
-                    value={formData.subject}
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body space-y-5">
+                <div className="field-group">
+                  <label className="field-label">Titre</label>
+                  <input
+                    type="text"
+                    name="title"
+                    value={formData.title}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
-                  >
-                    <option value="">Choisir une matiere</option>
-                    {subjects.map((subject) => (
-                      <option key={subject._id} value={subject._id}>
-                        {subject.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Filiere
-                  </label>
-                  <select
-                    name="branch"
-                    value={formData.branch}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Choisir une filiere</option>
-                    {branches.map((branch) => (
-                      <option key={branch._id} value={branch._id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="form-grid">
+                  <div className="field-group">
+                    <label className="field-label">Matiere</label>
+                    <select
+                      name="subject"
+                      value={formData.subject}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="">Choisir une matiere</option>
+                      {subjects.map((subject) => (
+                        <option key={subject._id} value={subject._id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field-group">
+                    <label className="field-label">Filiere</label>
+                    <select
+                      name="branch"
+                      value={formData.branch}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="">Choisir une filiere</option>
+                      {branches.map((branch) => (
+                        <option key={branch._id} value={branch._id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field-group">
+                    <label className="field-label">Semestre</label>
+                    <select
+                      name="semester"
+                      value={formData.semester}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="">Choisir un semestre</option>
+                      {formSemesterOptions.map((sem) => (
+                        <option key={sem} value={sem}>
+                          {formatSemesterLabel(sem)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field-group">
+                    <label className="field-label">Classe</label>
+                    <select
+                      name="classId"
+                      value={formData.classId}
+                      onChange={handleInputChange}
+                    >
+                      <option value="">Aucune classe specifique</option>
+                      {filteredFormClasses.map((academicClass) => (
+                        <option key={academicClass._id} value={academicClass._id}>
+                          {getAcademicClassLabel(academicClass)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field-group md:col-span-2">
+                    <label className="field-label">Type</label>
+                    <select
+                      name="type"
+                      value={formData.type}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="notes">Notes de cours</option>
+                      <option value="assignment">Devoir</option>
+                      <option value="syllabus">Programme</option>
+                      <option value="other">Autre</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
-                  <select
-                    name="semester"
-                    value={formData.semester}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Choisir un semestre</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                      <option key={sem} value={sem}>
-                        {formatSemesterLabel(sem)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Classe
-                  </label>
-                  <select
-                    name="classId"
-                    value={formData.classId}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Aucune classe specifique</option>
-                    {filteredFormClasses.map((academicClass) => (
-                      <option key={academicClass._id} value={academicClass._id}>
-                        {getAcademicClassLabel(academicClass)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Type
-                  </label>
-                  <select
-                    name="type"
-                    value={formData.type}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="notes">Notes de cours</option>
-                    <option value="assignment">Devoir</option>
-                    <option value="syllabus">Programme</option>
-                    <option value="other">Autre</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Fichier de la ressource
-                </label>
-                <div className="flex items-center space-x-4">
-                  <label className="flex-1 px-4 py-2 border rounded-md cursor-pointer hover:bg-gray-50">
-                    <span className="flex items-center justify-center">
-                      <FiUpload className="mr-2" />
+                <div className="field-group">
+                  <label className="field-label">Fichier de la ressource</label>
+                  <label className="upload-field cursor-pointer">
+                    <span className="inline-flex items-center gap-2">
+                      <FiUpload />
                       {file ? file.name : "Choisir un fichier"}
+                    </span>
+                    <span className="badge badge-neutral">
+                      {editingMaterial ? "Optionnel" : "Requis"}
                     </span>
                     <input
                       type="file"
@@ -628,40 +694,26 @@ const Material = () => {
                       required={!editingMaterial}
                     />
                   </label>
-                  {file && (
-                    <CustomButton
-                      onClick={() => setFile(null)}
-                      variant="danger"
-                      className="!p-2"
-                    >
-                      <AiOutlineClose size={20} />
-                    </CustomButton>
-                  )}
                 </div>
-              </div>
 
-              <div className="flex justify-end space-x-4 mt-6">
-                <CustomButton
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                  }}
-                  variant="secondary"
-                >
-                  Annuler
-                </CustomButton>
-                <CustomButton type="submit" disabled={dataLoading}>
-                  {dataLoading
-                    ? "Traitement..."
-                    : editingMaterial
-                    ? "Modifier la ressource"
-                    : "Ajouter la ressource"}
-                </CustomButton>
+                <div className="modal-footer">
+                  <CustomButton type="button" onClick={resetForm} variant="secondary">
+                    Annuler
+                  </CustomButton>
+                  <CustomButton type="submit" disabled={dataLoading}>
+                    {dataLoading
+                      ? "Traitement..."
+                      : editingMaterial
+                      ? "Modifier la ressource"
+                      : "Ajouter la ressource"}
+                  </CustomButton>
+                </div>
               </div>
             </form>
           </div>
         </div>
-      )}
+      ) : null}
+
       <DeleteConfirm
         isOpen={isDeleteConfirmOpen}
         onClose={() => setIsDeleteConfirmOpen(false)}

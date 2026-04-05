@@ -15,6 +15,21 @@ const Subject = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      default: null,
+    },
+    classId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicClass",
+      default: null,
+    },
+    academicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicYear",
+      default: null,
+    },
     semester: {
       type: Number,
       required: true,
@@ -22,6 +37,25 @@ const Subject = new mongoose.Schema(
     credits: {
       type: Number,
       required: true,
+    },
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archiveReason: {
+      type: String,
+      default: "",
+      trim: true,
     },
   },
   { timestamps: true }

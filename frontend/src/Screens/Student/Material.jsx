@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { MdLink } from "react-icons/md";
-import Heading from "../../components/Heading";
-import { useSelector } from "react-redux";
-import axiosWrapper from "../../utils/AxiosWrapper";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { MdLink } from "react-icons/md";
+import { useSelector } from "react-redux";
 import CustomButton from "../../components/CustomButton";
+import Heading from "../../components/Heading";
 import Loading from "../../components/Loading";
+import NoData from "../../components/NoData";
+import StatusBadge from "../../components/StatusBadge";
+import axiosWrapper from "../../utils/AxiosWrapper";
 import {
   getAcademicClassLabel,
   getMaterialTypeLabel,
@@ -46,11 +48,14 @@ const Material = () => {
         setSubjects(response.data.data);
       }
     } catch (error) {
-      if (error && error.response && error.response.status === 404) {
+      if (error?.response?.status === 404) {
         setSubjects([]);
         return;
       }
-      toast.error(error?.response?.data?.message || "Impossible de charger les matieres");
+      toast.error(
+        error?.response?.data?.message ||
+          "Impossible de charger les matieres"
+      );
     } finally {
       setDataLoading(false);
     }
@@ -83,11 +88,14 @@ const Material = () => {
         setMaterials(response.data.data);
       }
     } catch (error) {
-      if (error && error.response && error.response.status === 404) {
+      if (error?.response?.status === 404) {
         setMaterials([]);
         return;
       }
-      toast.error(error?.response?.data?.message || "Impossible de charger les ressources");
+      toast.error(
+        error?.response?.data?.message ||
+          "Impossible de charger les ressources"
+      );
     } finally {
       setDataLoading(false);
     }
@@ -101,30 +109,65 @@ const Material = () => {
     fetchMaterials();
   }, [fetchMaterials]);
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
     setFilters((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  return (
-    <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
-      <Heading title="Ressources pedagogiques" />
+  const stats = useMemo(
+    () => [
+      { label: "Ressources", value: materials.length },
+      {
+        label: "Matieres",
+        value: new Set(materials.map((material) => material.subject?._id).filter(Boolean))
+          .size,
+      },
+      {
+        label: "Types",
+        value: new Set(materials.map((material) => material.type).filter(Boolean)).size,
+      },
+    ],
+    [materials]
+  );
 
-      {!dataLoading && (
-        <div className="w-full mt-4">
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Filtrer par matiere
-              </label>
+  return (
+    <div className="screen-shell">
+      <div className="action-bar">
+        <Heading
+          title="Ressources pedagogiques"
+          subtitle="Retrouvez les supports de cours mis a disposition pour votre semestre et votre classe."
+        />
+      </div>
+
+      <div className="metric-grid">
+        {stats.map((stat) => (
+          <div key={stat.label} className="panel-section px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {stat.label}
+            </p>
+            <p className="mt-3 text-3xl font-extrabold text-slate-900">
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {!dataLoading ? (
+        <div className="filter-card">
+          <div className="section-header">
+            <p className="section-kicker">Filtres</p>
+            <h2 className="section-title">Affiner les ressources</h2>
+          </div>
+          <div className="mt-5 filter-grid-2">
+            <div className="field-group">
+              <label className="field-label">Matiere</label>
               <select
                 name="subject"
                 value={filters.subject}
                 onChange={handleFilterChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Toutes les matieres</option>
                 {subjects.map((subject) => (
@@ -135,15 +178,12 @@ const Material = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Filtrer par type
-              </label>
+            <div className="field-group">
+              <label className="field-label">Type</label>
               <select
                 name="type"
                 value={filters.type}
                 onChange={handleFilterChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Tous les types</option>
                 <option value="notes">Notes de cours</option>
@@ -154,57 +194,74 @@ const Material = () => {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {dataLoading && <Loading />}
+      {dataLoading ? (
+        <Loading label="Chargement des ressources..." />
+      ) : materials.length === 0 ? (
+        <NoData
+          title="Aucune ressource trouvee"
+          description="Les ressources compatibles avec votre classe et votre semestre apparaitront ici."
+        />
+      ) : (
+        <div className="table-shell">
+          <div className="table-toolbar">
+            <div className="section-header">
+              <p className="section-kicker">Bibliotheque de cours</p>
+              <h2 className="section-title">Documents disponibles</h2>
+              <p className="section-subtitle">
+                Accedez rapidement aux notes, devoirs, programmes et autres
+                supports partages.
+              </p>
+            </div>
+          </div>
 
-      {!dataLoading && (
-        <div className="w-full mt-8 overflow-x-auto">
-          <table className="text-sm min-w-full bg-white">
-            <thead>
-              <tr className="bg-blue-500 text-white">
-                <th className="py-4 px-6 text-left font-semibold">Fichier</th>
-                <th className="py-4 px-6 text-left font-semibold">Titre</th>
-                <th className="py-4 px-6 text-left font-semibold">Matiere</th>
-                <th className="py-4 px-6 text-left font-semibold">Classe</th>
-                <th className="py-4 px-6 text-left font-semibold">Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {materials && materials.length > 0 ? (
-                materials.map((material) => (
-                  <tr key={material._id} className="border-b hover:bg-blue-50">
-                    <td className="py-4 px-6">
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th>Fichier</th>
+                  <th>Titre</th>
+                  <th>Matiere</th>
+                  <th>Classe</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {materials.map((material) => (
+                  <tr key={material._id}>
+                    <td>
                       <CustomButton
                         variant="primary"
+                        className="!p-2.5"
                         onClick={() => {
                           window.open(
                             `${process.env.REACT_APP_MEDIA_LINK}/${material.file}`
                           );
                         }}
                       >
-                        <MdLink className="text-xl" />
+                        <MdLink className="text-lg" />
                       </CustomButton>
                     </td>
-                    <td className="py-4 px-6">{material.title}</td>
-                    <td className="py-4 px-6">{material.subject.name}</td>
-                    <td className="py-4 px-6">
+                    <td className="font-semibold text-slate-900">
+                      {material.title}
+                    </td>
+                    <td>{material.subject.name}</td>
+                    <td>
                       {material.classId
                         ? getAcademicClassLabel(material.classId)
                         : "Generale"}
                     </td>
-                    <td className="py-4 px-6">{getMaterialTypeLabel(material.type)}</td>
+                    <td>
+                      <StatusBadge tone="neutral">
+                        {getMaterialTypeLabel(material.type)}
+                      </StatusBadge>
+                    </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="text-center text-base pt-10">
-                    Aucune ressource trouvee.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

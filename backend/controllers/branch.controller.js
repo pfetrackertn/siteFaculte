@@ -1,96 +1,161 @@
 const Branch = require("../models/branch.model");
 const ApiResponse = require("../utils/ApiResponse");
+const { buildArchiveUpdate, getArchiveFilter } = require("../utils/archive");
 
-const getBranchController = async (req, res, next) => {
+const populateBranch = (query) =>
+  query.populate("departmentId", "name code status");
+
+const getBranchController = async (req, res) => {
   try {
-    const { search = "" } = req.query;
+    const { search = "", departmentId = "", status = "" } = req.query;
+    const query = {
+      ...getArchiveFilter(req.query),
+    };
 
-    const branches = await Branch.find({
-      $or: [
+    if (departmentId) {
+      query.departmentId = departmentId;
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    if (search) {
+      query.$or = [
         { name: { $regex: search, $options: "i" } },
         { branchId: { $regex: search, $options: "i" } },
-      ],
-    });
-    if (!branches || branches.length === 0) {
-      return ApiResponse.error("Aucune filiere trouvee", 404).send(res);
+      ];
+    }
+
+    const branches = await populateBranch(Branch.find(query).sort({ name: 1 }));
+
+    if (!branches.length) {
+      return ApiResponse.notFound("Aucune filiere trouvee").send(res);
     }
 
     return ApiResponse.success(branches, "Filieres chargees avec succes").send(
       res
     );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Get Branch Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
-const addBranchController = async (req, res, next) => {
-  let { name, branchId } = req.body;
+const addBranchController = async (req, res) => {
   try {
-    let existingBranch = await Branch.findOne({
-      $or: [{ name }, { branchId }],
-    });
+    const { name, branchId, description = "", departmentId = null } = req.body;
 
-    if (existingBranch) {
-      return ApiResponse.error(
-        "Une filiere avec ce nom ou cet identifiant existe deja !",
-        409
+    if (!name || !branchId) {
+      return ApiResponse.badRequest(
+        "Le nom et l'identifiant de la filiere sont requis"
       ).send(res);
     }
 
-    const newBranch = await Branch.create(req.body);
-    return ApiResponse.created(newBranch, "Filiere ajoutee avec succes").send(
-      res
-    );
+    const duplicateBranch = await Branch.findOne({
+      $or: [{ name: name.trim() }, { branchId: branchId.trim() }],
+    });
+
+    if (duplicateBranch) {
+      return ApiResponse.conflict(
+        "Une filiere avec ce nom ou cet identifiant existe deja"
+      ).send(res);
+    }
+
+    const newBranch = await Branch.create({
+      name: name.trim(),
+      branchId: branchId.trim(),
+      description: description.trim(),
+      departmentId: departmentId || null,
+      status: req.body.status || "active",
+    });
+
+    const populatedBranch = await populateBranch(Branch.findById(newBranch._id));
+
+    return ApiResponse.created(
+      populatedBranch,
+      "Filiere ajoutee avec succes"
+    ).send(res);
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Add Branch Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
-const updateBranchController = async (req, res, next) => {
+const updateBranchController = async (req, res) => {
   try {
-    const { name, branchId } = req.body;
+    const branch = await Branch.findById(req.params.id);
 
-    if (name || branchId) {
-      const existingBranch = await Branch.findOne({
+    if (!branch) {
+      return ApiResponse.notFound("Filiere introuvable").send(res);
+    }
+
+    const updateData = { ...req.body };
+
+    if (updateData.name || updateData.branchId) {
+      const duplicateBranch = await Branch.findOne({
         _id: { $ne: req.params.id },
-        $or: [{ name: name || undefined }, { branchId: branchId || undefined }],
+        $or: [
+          { name: updateData.name ? updateData.name.trim() : undefined },
+          {
+            branchId: updateData.branchId
+              ? updateData.branchId.trim()
+              : undefined,
+          },
+        ],
       });
 
-      if (existingBranch) {
-        return ApiResponse.error(
-          "Une filiere avec ce nom ou cet identifiant existe deja !",
-          409
+      if (duplicateBranch) {
+        return ApiResponse.conflict(
+          "Une filiere avec ce nom ou cet identifiant existe deja"
         ).send(res);
       }
     }
 
-    let branch = await Branch.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
-
-    if (!branch) {
-      return ApiResponse.error("Filiere introuvable", 404).send(res);
+    if (updateData.name) {
+      updateData.name = updateData.name.trim();
     }
 
-    return ApiResponse.success(branch, "Filiere mise a jour avec succes").send(
-      res
+    if (updateData.branchId) {
+      updateData.branchId = updateData.branchId.trim();
+    }
+
+    if (updateData.description !== undefined) {
+      updateData.description = updateData.description.trim();
+    }
+
+    const updatedBranch = await populateBranch(
+      Branch.findByIdAndUpdate(req.params.id, updateData, { new: true })
     );
+
+    return ApiResponse.success(
+      updatedBranch,
+      "Filiere mise a jour avec succes"
+    ).send(res);
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Update Branch Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
-const deleteBranchController = async (req, res, next) => {
+const deleteBranchController = async (req, res) => {
   try {
-    let branch = await Branch.findById(req.params.id);
+    const branch = await Branch.findByIdAndUpdate(
+      req.params.id,
+      buildArchiveUpdate(true, "Suppression logique depuis le module admin"),
+      { new: true }
+    );
+
     if (!branch) {
-      return ApiResponse.error("Filiere introuvable", 404).send(res);
+      return ApiResponse.notFound("Filiere introuvable").send(res);
     }
 
-    await Branch.findByIdAndDelete(req.params.id);
-    return ApiResponse.success(null, "Filiere supprimee avec succes").send(res);
+    return ApiResponse.success(branch, "Filiere archivee avec succes").send(
+      res
+    );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Delete Branch Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 

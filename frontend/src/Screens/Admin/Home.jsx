@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast, Toaster } from "react-hot-toast";
 import {
+  PiBooks,
   PiBuildings,
+  PiCalendarBlank,
   PiChalkboardTeacher,
   PiExam,
+  PiFolderOpen,
   PiFolders,
   PiMegaphone,
+  PiMoney,
   PiShieldCheck,
   PiStudent,
   PiUserCircleGear,
@@ -14,7 +18,6 @@ import { MdClass } from "react-icons/md";
 import { useDispatch } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
-import BrandMark from "../../components/BrandMark";
 import DashboardMenu from "../../components/DashboardMenu";
 import Loading from "../../components/Loading";
 import axiosWrapper from "../../utils/AxiosWrapper";
@@ -22,12 +25,18 @@ import { setUserData } from "../../redux/actions";
 import Admin from "./Admin";
 import Branch from "./Branch";
 import Classes from "./Class";
+import Department from "./Department";
 import Faculty from "./Faculty";
 import Notice from "../Notice";
 import Profile from "./Profile";
+import Promotion from "./Promotion";
 import Student from "./Student";
 import Subjects from "./Subject";
 import Exam from "../Exam";
+import AcademicYear from "./AcademicYear";
+import AcademicFees from "../AcademicFees";
+import Library from "../Library";
+import ArchiveCenter from "./ArchiveCenter";
 
 const MENU_ITEMS = [
   {
@@ -59,6 +68,20 @@ const MENU_ITEMS = [
     icon: PiBuildings,
   },
   {
+    id: "department",
+    label: "Departements",
+    description: "Sections et rattachements",
+    component: Department,
+    icon: PiFolderOpen,
+  },
+  {
+    id: "academic-year",
+    label: "Annees",
+    description: "Pilotage de l'annee active",
+    component: AcademicYear,
+    icon: PiCalendarBlank,
+  },
+  {
     id: "class",
     label: "Classes",
     description: "Promotions et groupes",
@@ -73,6 +96,27 @@ const MENU_ITEMS = [
     icon: PiFolders,
   },
   {
+    id: "promotion",
+    label: "Promotions",
+    description: "Cohortes et parcours",
+    component: Promotion,
+    icon: PiStudent,
+  },
+  {
+    id: "fees",
+    label: "Frais",
+    description: "Gestion financiere academique",
+    component: AcademicFees,
+    icon: PiMoney,
+  },
+  {
+    id: "library",
+    label: "Library",
+    description: "Documents institutionnels",
+    component: Library,
+    icon: PiBooks,
+  },
+  {
     id: "notice",
     label: "Annonces",
     description: "Communication interne",
@@ -85,6 +129,13 @@ const MENU_ITEMS = [
     description: "Calendrier et documents",
     component: Exam,
     icon: PiExam,
+  },
+  {
+    id: "archives",
+    label: "Archives",
+    description: "Restauration des donnees",
+    component: ArchiveCenter,
+    icon: PiShieldCheck,
   },
   {
     id: "admin",
@@ -171,48 +222,14 @@ const Home = () => {
     <>
       <Navbar />
       <div className="page-shell space-y-6 py-6 sm:py-8">
-        <section className="panel-section overflow-hidden px-6 py-7 sm:px-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
-                Administration
-              </p>
-              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-                {profileData?.firstName
-                  ? `Bienvenue, ${profileData.firstName}`
-                  : "Tableau de bord administrateur"}
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
-                Centralisez les comptes, les filieres, les classes, les
-                annonces et les examens depuis une interface plus claire et plus
-                rapide.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <div className="rounded-3xl border border-amber-100 bg-[linear-gradient(135deg,rgba(255,250,214,0.92),rgba(255,255,255,0.96))] px-4 py-4 shadow-[0_18px_42px_-34px_rgba(245,158,11,0.45)]">
-                <BrandMark compact subtitle="Campus digital ISC-KIN" />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
-                  Role
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  {profileData?.isSuperAdmin
-                    ? "Super administrateur"
-                    : "Administrateur"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Sections
-                </p>
-                <p className="mt-1 text-sm font-semibold text-slate-800">
-                  {MENU_ITEMS.length} modules disponibles
-                </p>
-              </div>
-              </div>
-            </div>
+        <section className="panel-section dashboard-hero">
+          <div className="section-header">
+            <p className="section-kicker">Administrateur</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+              {profileData?.firstName
+                ? `Bonjour ${profileData.firstName}`
+                : "Tableau de bord administrateur"}
+            </h1>
           </div>
         </section>
 
@@ -222,7 +239,7 @@ const Home = () => {
           onSelect={handleMenuClick}
         />
 
-        <section className="panel-section overflow-hidden px-3 py-3 sm:px-4 sm:py-4">
+        <section className="panel-section dashboard-stage">
           {renderContent()}
         </section>
       </div>

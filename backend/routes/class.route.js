@@ -1,5 +1,6 @@
 const express = require("express");
 const auth = require("../middlewares/auth.middleware");
+const { allowRoles } = require("../middlewares/role.middleware");
 const {
   getClassesController,
   addClassController,
@@ -10,8 +11,8 @@ const {
 const router = express.Router();
 
 router.get("/", auth, getClassesController);
-router.post("/", auth, addClassController);
-router.patch("/:id", auth, updateClassController);
-router.delete("/:id", auth, deleteClassController);
+router.post("/", auth, allowRoles("admin"), addClassController);
+router.patch("/:id", auth, allowRoles("admin"), updateClassController);
+router.delete("/:id", auth, allowRoles("admin"), deleteClassController);
 
 module.exports = router;

@@ -1,28 +1,39 @@
 const ApiResponse = require("../utils/ApiResponse");
 const AcademicClass = require("../models/class.model");
 const Branch = require("../models/branch.model");
-const StudentDetail = require("../models/details/student-details.model");
-const Material = require("../models/material.model");
-const Timetable = require("../models/timetable.model");
+const Department = require("../models/department.model");
+const { getArchiveFilter, buildArchiveUpdate } = require("../utils/archive");
+const { resolveAcademicYearId } = require("../utils/academic-year");
 
 const normalizeCode = (code = "") => code.trim().toUpperCase();
 
+const populateAcademicClass = (query) =>
+  query
+    .populate("branchId", "name branchId")
+    .populate("departmentId", "name code")
+    .populate("academicYearId", "name isActive");
+
 const getClassesController = async (req, res) => {
   try {
-    const { search = "", branchId = "", semester = "", status = "" } = req.query;
-    const query = {};
+    const {
+      search = "",
+      branchId = "",
+      semester = "",
+      status = "",
+      departmentId = "",
+      academicYearId = "",
+      level = "",
+    } = req.query;
+    const query = {
+      ...getArchiveFilter(req.query),
+    };
 
-    if (branchId) {
-      query.branchId = branchId;
-    }
-
-    if (semester) {
-      query.semester = Number(semester);
-    }
-
-    if (status) {
-      query.status = status;
-    }
+    if (branchId) query.branchId = branchId;
+    if (semester) query.semester = Number(semester);
+    if (status) query.status = status;
+    if (departmentId) query.departmentId = departmentId;
+    if (academicYearId) query.academicYearId = academicYearId;
+    if (level) query.level = level;
 
     if (search) {
       query.$or = [
@@ -31,11 +42,11 @@ const getClassesController = async (req, res) => {
       ];
     }
 
-    const classes = await AcademicClass.find(query)
-      .populate("branchId", "name branchId")
-      .sort({ semester: 1, name: 1 });
+    const classes = await populateAcademicClass(
+      AcademicClass.find(query).sort({ semester: 1, level: 1, name: 1 })
+    );
 
-    if (!classes || classes.length === 0) {
+    if (!classes.length) {
       return ApiResponse.notFound("Aucune classe trouvee").send(res);
     }
 
@@ -58,6 +69,9 @@ const addClassController = async (req, res) => {
       capacity = 0,
       description = "",
       status = "active",
+      level = "L1",
+      programType = "licence",
+      departmentId = null,
     } = req.body;
 
     if (!name || !code || !branchId || !semester) {
@@ -71,15 +85,29 @@ const addClassController = async (req, res) => {
       return ApiResponse.notFound("Filiere introuvable").send(res);
     }
 
+    if (departmentId) {
+      const department = await Department.findById(departmentId);
+      if (!department) {
+        return ApiResponse.notFound("Departement introuvable").send(res);
+      }
+    }
+
+    const academicYearId = await resolveAcademicYearId(req.body.academicYearId);
     const normalizedCode = normalizeCode(code);
-    const existingClass = await AcademicClass.findOne({
+
+    const duplicateClass = await AcademicClass.findOne({
       $or: [
         { code: normalizedCode },
-        { name: name.trim(), branchId, semester: Number(semester) },
+        {
+          name: name.trim(),
+          branchId,
+          semester: Number(semester),
+          academicYearId: academicYearId || null,
+        },
       ],
     });
 
-    if (existingClass) {
+    if (duplicateClass) {
       return ApiResponse.conflict(
         "Une classe avec ce nom ou ce code existe deja"
       ).send(res);
@@ -89,14 +117,19 @@ const addClassController = async (req, res) => {
       name: name.trim(),
       code: normalizedCode,
       branchId,
+      departmentId: departmentId || branch.departmentId || null,
+      academicYearId,
+      level,
+      programType,
       semester: Number(semester),
       capacity: Number(capacity) || 0,
       description: description.trim(),
       status,
     });
 
-    const populatedClass = await AcademicClass.findById(academicClass._id)
-      .populate("branchId", "name branchId");
+    const populatedClass = await populateAcademicClass(
+      AcademicClass.findById(academicClass._id)
+    );
 
     return ApiResponse.created(
       populatedClass,
@@ -117,7 +150,13 @@ const updateClassController = async (req, res) => {
       return ApiResponse.notFound("Classe introuvable").send(res);
     }
 
-    const nextBranchId = req.body.branchId || currentClass.branchId.toString();
+    const nextBranchId = req.body.branchId || currentClass.branchId?.toString();
+    const nextAcademicYearId = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "academicYearId"
+    )
+      ? await resolveAcademicYearId(req.body.academicYearId)
+      : currentClass.academicYearId;
     const nextSemester = Number(req.body.semester || currentClass.semester);
     const nextName = req.body.name ? req.body.name.trim() : currentClass.name;
     const nextCode = req.body.code
@@ -133,7 +172,12 @@ const updateClassController = async (req, res) => {
       _id: { $ne: id },
       $or: [
         { code: nextCode },
-        { name: nextName, branchId: nextBranchId, semester: nextSemester },
+        {
+          name: nextName,
+          branchId: nextBranchId,
+          semester: nextSemester,
+          academicYearId: nextAcademicYearId || null,
+        },
       ],
     });
 
@@ -143,44 +187,30 @@ const updateClassController = async (req, res) => {
       ).send(res);
     }
 
-    const branchChanged =
-      String(currentClass.branchId) !== String(nextBranchId) ||
-      Number(currentClass.semester) !== nextSemester;
-
-    if (branchChanged) {
-      const [studentUsingClass, materialUsingClass, timetableUsingClass] =
-        await Promise.all([
-          StudentDetail.exists({ classId: id }),
-          Material.exists({ classId: id }),
-          Timetable.exists({ classId: id }),
-        ]);
-
-      if (studentUsingClass || materialUsingClass || timetableUsingClass) {
-        return ApiResponse.conflict(
-          "Impossible de changer la filiere ou le semestre d'une classe deja utilisee"
-        ).send(res);
-      }
-    }
-
-    const updatedClass = await AcademicClass.findByIdAndUpdate(
-      id,
-      {
-        ...req.body,
-        name: nextName,
-        code: nextCode,
-        branchId: nextBranchId,
-        semester: nextSemester,
-        capacity:
-          req.body.capacity !== undefined
-            ? Number(req.body.capacity) || 0
-            : currentClass.capacity,
-        description:
-          req.body.description !== undefined
-            ? req.body.description.trim()
-            : currentClass.description,
-      },
-      { new: true }
-    ).populate("branchId", "name branchId");
+    const updatedClass = await populateAcademicClass(
+      AcademicClass.findByIdAndUpdate(
+        id,
+        {
+          ...req.body,
+          name: nextName,
+          code: nextCode,
+          branchId: nextBranchId,
+          departmentId:
+            req.body.departmentId || currentClass.departmentId || branch.departmentId,
+          academicYearId: nextAcademicYearId || null,
+          semester: nextSemester,
+          capacity:
+            req.body.capacity !== undefined
+              ? Number(req.body.capacity) || 0
+              : currentClass.capacity,
+          description:
+            req.body.description !== undefined
+              ? req.body.description.trim()
+              : currentClass.description,
+        },
+        { new: true }
+      )
+    );
 
     return ApiResponse.success(
       updatedClass,
@@ -194,29 +224,20 @@ const updateClassController = async (req, res) => {
 
 const deleteClassController = async (req, res) => {
   try {
-    const { id } = req.params;
-    const academicClass = await AcademicClass.findById(id);
+    const academicClass = await AcademicClass.findByIdAndUpdate(
+      req.params.id,
+      buildArchiveUpdate(true, "Suppression logique depuis le module admin"),
+      { new: true }
+    );
 
     if (!academicClass) {
       return ApiResponse.notFound("Classe introuvable").send(res);
     }
 
-    const [studentUsingClass, materialUsingClass, timetableUsingClass] =
-      await Promise.all([
-        StudentDetail.exists({ classId: id }),
-        Material.exists({ classId: id }),
-        Timetable.exists({ classId: id }),
-      ]);
-
-    if (studentUsingClass || materialUsingClass || timetableUsingClass) {
-      return ApiResponse.conflict(
-        "Cette classe est deja utilisee par des etudiants ou des contenus academiques"
-      ).send(res);
-    }
-
-    await AcademicClass.findByIdAndDelete(id);
-
-    return ApiResponse.success(null, "Classe supprimee avec succes").send(res);
+    return ApiResponse.success(
+      academicClass,
+      "Classe archivee avec succes"
+    ).send(res);
   } catch (error) {
     console.error("Delete Class Error:", error);
     return ApiResponse.internalServerError().send(res);

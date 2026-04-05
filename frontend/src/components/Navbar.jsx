@@ -2,7 +2,6 @@ import React from "react";
 import { FiLogOut } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import CustomButton from "./CustomButton";
-import BrandMark from "./BrandMark";
 import { getUserTypeLabel } from "../utils/displayText";
 
 const Navbar = () => {
@@ -24,28 +23,36 @@ const Navbar = () => {
           <div className="pointer-events-none absolute inset-y-0 left-0 w-56 bg-[radial-gradient(circle_at_left,rgba(247,223,55,0.18),transparent_62%)]" />
           <div className="pointer-events-none absolute inset-y-0 right-0 w-56 bg-[radial-gradient(circle_at_right,rgba(31,135,216,0.16),transparent_62%)]" />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            className="flex items-center gap-4 text-left"
-            onClick={() => navigate("/")}
-          >
-            <BrandMark
-              compact
-              subtitle={`${displayType} - Tableau de bord`}
-            />
-          </button>
+            <button
+              className="flex items-center gap-4 text-left"
+              onClick={() => navigate("/")}
+            >
+              <div className="flex h-14 w-14 items-center justify-center rounded-[28px] border border-white/70 bg-white/90 p-2 shadow-[0_20px_40px_-28px_rgba(15,23,42,0.5)]">
+                <img
+                  src="/assets/isc-kin-logo.svg"
+                  alt="Logo ISC-KIN"
+                  className="h-10 w-10 object-contain"
+                />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Institution
+                </p>
+                <p className="mt-1 truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+                  ISC-KIN
+                </p>
+              </div>
+            </button>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 sm:inline-flex">
-              ISC-KIN
-            </span>
-            <span className="hidden rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 lg:inline-flex">
-              {displayType}
-            </span>
-            <CustomButton variant="danger" onClick={logoutHandler}>
-              Deconnexion
-              <FiLogOut className="text-base" />
-            </CustomButton>
-          </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">
+                {displayType}
+              </span>
+              <CustomButton variant="danger" onClick={logoutHandler}>
+                Deconnexion
+                <FiLogOut className="text-base" />
+              </CustomButton>
+            </div>
           </div>
         </div>
       </div>

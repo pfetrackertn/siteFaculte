@@ -8,286 +8,321 @@ import axiosWrapper from "../../utils/AxiosWrapper";
 import CustomButton from "../../components/CustomButton";
 import NoData from "../../components/NoData";
 import Loading from "../../components/Loading";
-import { CgDanger } from "react-icons/cg";
+import FormSection from "../../components/FormSection";
+import FileUpload from "../../components/FileUpload";
+import useAcademicOptions from "../../hooks/useAcademicOptions";
 import {
   formatSemesterLabel,
   getAcademicClassLabel,
+  getDefaultCountryLabel,
+  getStatusLabel,
 } from "../../utils/displayText";
+import { getSemesterOptions } from "../../utils/semesterOptions";
+
+const INITIAL_FORM_DATA = {
+  firstName: "",
+  middleName: "",
+  lastName: "",
+  phone: "",
+  semester: "",
+  branchId: "",
+  departmentId: "",
+  classId: "",
+  academicYearId: "",
+  promotionId: "",
+  entryYear: "",
+  gender: "",
+  dob: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+  country: getDefaultCountryLabel(),
+  profile: "",
+  status: "active",
+  bloodGroup: "",
+  emergencyContact: {
+    name: "",
+    relationship: "",
+    phone: "",
+  },
+};
 
 const Student = () => {
-  const [searchParams, setSearchParams] = useState({
-    enrollmentNo: "",
-    name: "",
-    semester: "",
-    branch: "",
-    classId: "",
-  });
+  const token = localStorage.getItem("userToken");
+  const { academicYears, departments, branches, classes, promotions, refreshOptions } =
+    useAcademicOptions();
   const [students, setStudents] = useState([]);
-  const [branches, setBranches] = useState([]);
-  const [classes, setClasses] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [file, setFile] = useState(null);
-  const [hasSearched, setHasSearched] = useState(false);
-  const userToken = localStorage.getItem("userToken");
-
-  const [formData, setFormData] = useState({
-    firstName: "",
-    middleName: "",
-    lastName: "",
-    phone: "",
-    semester: "",
+  const [filters, setFilters] = useState({
+    search: "",
+    academicYearId: "",
+    departmentId: "",
     branchId: "",
     classId: "",
-    gender: "",
-    dob: "",
-    address: "",
-    city: "",
-    state: "",
-    pincode: "",
-    country: "",
-    profile: "",
-    status: "active",
-    bloodGroup: "",
-    emergencyContact: {
-      name: "",
-      relationship: "",
-      phone: "",
-    },
+    promotionId: "",
+    semester: "",
   });
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
 
-  const getBranchHandler = useCallback(async () => {
-    try {
-      toast.loading("Chargement des filieres...");
-      const response = await axiosWrapper.get(`/branch`, {
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-        },
-      });
-      if (response.data.success) {
-        setBranches(response.data.data);
-      } else {
-        toast.error(response.data.message);
-      }
-    } catch (error) {
-      if (error.response?.status === 404) {
-        setBranches([]);
-      } else {
-        console.error(error);
-        toast.error(error.response?.data?.message || "Erreur lors du chargement des filieres");
-      }
-    } finally {
-      toast.dismiss();
+  const filteredBranches = useMemo(() => {
+    const departmentId = showModal ? formData.departmentId : filters.departmentId;
+    if (!departmentId) {
+      return branches;
     }
-  }, [userToken]);
 
-  useEffect(() => {
-    getBranchHandler();
-  }, [getBranchHandler]);
+    return branches.filter(
+      (branch) => branch.departmentId?._id === departmentId
+    );
+  }, [branches, filters.departmentId, formData.departmentId, showModal]);
 
-  const getClassesHandler = useCallback(async () => {
-    try {
-      const response = await axiosWrapper.get(`/class`, {
-        headers: {
-          Authorization: `Bearer ${userToken}`,
-        },
-      });
-      if (response.data.success) {
-        setClasses(response.data.data);
-      } else {
-        toast.error(response.data.message);
-      }
-    } catch (error) {
-      if (error.response?.status === 404) {
-        setClasses([]);
-      } else {
-        toast.error(
-          error.response?.data?.message ||
-            "Erreur lors du chargement des classes"
-        );
-      }
-    }
-  }, [userToken]);
-
-  useEffect(() => {
-    getClassesHandler();
-  }, [getClassesHandler]);
-
-  const filteredSearchClasses = useMemo(() => {
+  const filteredClasses = useMemo(() => {
+    const scope = showModal ? formData : filters;
     return classes.filter((academicClass) => {
-      if (searchParams.branch && academicClass.branchId?._id !== searchParams.branch) {
+      if (
+        scope.departmentId &&
+        academicClass.departmentId?._id !== scope.departmentId
+      ) {
+        return false;
+      }
+
+      const branchId = scope.branchId || scope.branch;
+      if (branchId && academicClass.branchId?._id !== branchId) {
         return false;
       }
 
       if (
-        searchParams.semester &&
-        Number(academicClass.semester) !== Number(searchParams.semester)
+        scope.academicYearId &&
+        academicClass.academicYearId?._id !== scope.academicYearId
+      ) {
+        return false;
+      }
+
+      if (
+        scope.semester &&
+        Number(academicClass.semester) !== Number(scope.semester)
       ) {
         return false;
       }
 
       return true;
     });
-  }, [classes, searchParams.branch, searchParams.semester]);
+  }, [classes, filters, formData, showModal]);
 
-  const filteredFormClasses = useMemo(() => {
-    return classes.filter((academicClass) => {
-      if (formData.branchId && academicClass.branchId?._id !== formData.branchId) {
-        return false;
-      }
-
+  const filteredPromotions = useMemo(() => {
+    const scope = showModal ? formData : filters;
+    return promotions.filter((promotion) => {
       if (
-        formData.semester &&
-        Number(academicClass.semester) !== Number(formData.semester)
+        scope.departmentId &&
+        promotion.departmentId?._id !== scope.departmentId
       ) {
         return false;
       }
-
+      if (scope.branchId && promotion.branchId?._id !== scope.branchId) {
+        return false;
+      }
+      if (
+        scope.academicYearId &&
+        promotion.academicYearId?._id !== scope.academicYearId
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [classes, formData.branchId, formData.semester]);
+  }, [filters, formData, promotions, showModal]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setSearchParams((prev) => ({
-      ...prev,
-      [name]: value,
-      ...(name === "branch" || name === "semester" ? { classId: "" } : {}),
-    }));
-  };
+  const selectedStudentClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === formData.classId),
+    [classes, formData.classId]
+  );
 
-  const searchStudents = async (e) => {
-    e.preventDefault();
+  const selectedFilterClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === filters.classId),
+    [classes, filters.classId]
+  );
 
-    if (
-      !searchParams.enrollmentNo &&
-      !searchParams.name &&
-      !searchParams.semester &&
-      !searchParams.branch &&
-      !searchParams.classId
-    ) {
-      toast.error("Veuillez selectionner au moins un filtre");
-      return;
-    }
+  const studentFormSemesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedStudentClass,
+        classes: filteredClasses,
+        currentValue: formData.semester,
+      }),
+    [filteredClasses, formData.semester, selectedStudentClass]
+  );
 
-    setDataLoading(true);
-    setHasSearched(true);
-    toast.loading("Recherche des etudiants...");
-    try {
-      const response = await axiosWrapper.post(
-        `/student/search`,
-        searchParams,
-        {
-          headers: { Authorization: `Bearer ${userToken}` },
-        }
+  const studentFilterSemesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedFilterClass,
+        classes: filteredClasses,
+        currentValue: filters.semester,
+      }),
+    [filteredClasses, filters.semester, selectedFilterClass]
+  );
+
+  const visibleStudents = useMemo(() => {
+    return students.filter((student) => {
+      const fullName = [student.firstName, student.middleName, student.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchesSearch = filters.search
+        ? fullName.includes(filters.search.toLowerCase()) ||
+          String(student.enrollmentNo || "").includes(filters.search)
+        : true;
+      const matchesYear = filters.academicYearId
+        ? student.academicYearId?._id === filters.academicYearId
+        : true;
+      const matchesDepartment = filters.departmentId
+        ? student.departmentId?._id === filters.departmentId
+        : true;
+      const matchesBranch = filters.branchId
+        ? student.branchId?._id === filters.branchId
+        : true;
+      const matchesClass = filters.classId
+        ? student.classId?._id === filters.classId
+        : true;
+      const matchesPromotion = filters.promotionId
+        ? student.promotionId?._id === filters.promotionId
+        : true;
+      const matchesSemester = filters.semester
+        ? Number(student.semester) === Number(filters.semester)
+        : true;
+
+      return (
+        matchesSearch &&
+        matchesYear &&
+        matchesDepartment &&
+        matchesBranch &&
+        matchesClass &&
+        matchesPromotion &&
+        matchesSemester
       );
+    });
+  }, [filters, students]);
 
-      toast.dismiss();
+  const stats = useMemo(
+    () => [
+      { label: "Etudiants", value: students.length },
+      {
+        label: "Actifs",
+        value: students.filter((student) => student.status === "active").length,
+      },
+      {
+        label: "Promotions",
+        value: new Set(
+          students.map((student) => student.promotionId?._id).filter(Boolean)
+        ).size,
+      },
+    ],
+    [students]
+  );
+
+  const fetchStudents = useCallback(async () => {
+    try {
+      setDataLoading(true);
+      const response = await axiosWrapper.get("/student", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
       if (response.data.success) {
-        if (response.data.data.length === 0) {
-          setStudents([]);
-        } else {
-          toast.success("Etudiants trouves !");
-          setStudents(response.data.data);
-        }
-      } else {
-        toast.error(response.data.message);
+        setStudents(response.data.data);
       }
     } catch (error) {
-      toast.dismiss();
-      setStudents([]);
-      if (error.response?.status !== 404) {
-        toast.error(
-          error.response?.data?.message ||
-            "Erreur lors de la recherche des etudiants"
-        );
+      if (error.response?.status === 404) {
+        setStudents([]);
+        return;
       }
+
+      toast.error(
+        error.response?.data?.message ||
+          "Erreur lors du chargement des etudiants"
+      );
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
 
   const handleFormInputChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
+    setFormData((current) => ({
+      ...current,
       [field]: value,
-      ...(field === "branchId" || field === "semester" ? { classId: "" } : {}),
+      ...(field === "departmentId" ? { branchId: "", classId: "", promotionId: "" } : {}),
+      ...(field === "branchId" ? { classId: "", promotionId: "" } : {}),
+      ...(field === "academicYearId" ? { classId: "", promotionId: "" } : {}),
     }));
   };
 
   const handleEmergencyContactChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
+    setFormData((current) => ({
+      ...current,
       emergencyContact: {
-        ...prev.emergencyContact,
+        ...current.emergencyContact,
         [field]: value,
       },
     }));
   };
 
-  const addStudentHandler = async () => {
+  const addStudentHandler = async (event) => {
+    event.preventDefault();
+
     try {
-      toast.loading(isEditing ? "Mise a jour de l'etudiant" : "Ajout de l'etudiant");
+      toast.loading(
+        isEditing ? "Mise a jour de l'etudiant..." : "Ajout de l'etudiant..."
+      );
       const headers = {
         "Content-Type": "multipart/form-data",
-        Authorization: `Bearer ${userToken}`,
+        Authorization: `Bearer ${token}`,
       };
 
-      const formDataToSend = new FormData();
+      const payload = new FormData();
       for (const key in formData) {
         if (key === "emergencyContact") {
           for (const subKey in formData.emergencyContact) {
-            formDataToSend.append(
+            payload.append(
               `emergencyContact[${subKey}]`,
               formData.emergencyContact[subKey]
             );
           }
         } else {
-          formDataToSend.append(key, formData[key]);
+          payload.append(key, formData[key]);
         }
       }
 
       if (file) {
-        formDataToSend.append("file", file);
+        payload.append("file", file);
       }
 
-      let response;
-      if (isEditing) {
-        response = await axiosWrapper.patch(
-          `/student/${selectedStudentId}`,
-          formDataToSend,
-          {
+      const response = isEditing
+        ? await axiosWrapper.patch(`/student/${selectedStudentId}`, payload, {
             headers,
-          }
-        );
-      } else {
-        response = await axiosWrapper.post(
-          `/student/register`,
-          formDataToSend,
-          {
+          })
+        : await axiosWrapper.post(`/student/register`, payload, {
             headers,
-          }
-        );
-      }
+          });
 
       toast.dismiss();
       if (response.data.success) {
-        if (!isEditing) {
-          toast.success(
-            "Etudiant cree avec succes. Mot de passe par defaut : student123"
-          );
-        } else {
-          toast.success(response.data.message);
-        }
+        toast.success(
+          isEditing
+            ? response.data.message
+            : "Etudiant cree avec succes. Mot de passe par defaut : student123"
+        );
         resetForm();
-        if (hasSearched) {
-          searchStudents({ preventDefault: () => {} });
-        }
-      } else {
-        toast.error(response.data.message);
+        refreshOptions();
+        fetchStudents();
       }
     } catch (error) {
       toast.dismiss();
@@ -295,61 +330,19 @@ const Student = () => {
     }
   };
 
-  const deleteStudentHandler = (id) => {
-    setIsDeleteConfirmOpen(true);
-    setSelectedStudentId(id);
-  };
-
-  const editStudentHandler = (student) => {
-    setFormData({
-      firstName: student.firstName || "",
-      middleName: student.middleName || "",
-      lastName: student.lastName || "",
-      phone: student.phone || "",
-      semester: student.semester || "",
-      branchId: student.branchId?._id || "",
-      classId: student.classId?._id || "",
-      gender: student.gender || "",
-      dob: student.dob?.split("T")[0] || "",
-      address: student.address || "",
-      city: student.city || "",
-      state: student.state || "",
-      pincode: student.pincode || "",
-      country: student.country || "",
-      profile: student.profile || "",
-      status: student.status || "active",
-      bloodGroup: student.bloodGroup || "",
-      emergencyContact: {
-        name: student.emergencyContact?.name || "",
-        relationship: student.emergencyContact?.relationship || "",
-        phone: student.emergencyContact?.phone || "",
-      },
-    });
-    setSelectedStudentId(student._id);
-    setIsEditing(true);
-    setShowAddForm(true);
-  };
-
   const confirmDelete = async () => {
     try {
-      toast.loading("Suppression de l'etudiant");
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${userToken}`,
-      };
-      const response = await axiosWrapper.delete(
-        `/student/${selectedStudentId}`,
-        {
-          headers,
-        }
-      );
+      toast.loading("Archivage de l'etudiant...");
+      const response = await axiosWrapper.delete(`/student/${selectedStudentId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       toast.dismiss();
       if (response.data.success) {
-        toast.success("L'etudiant a ete supprime avec succes");
+        toast.success(response.data.message);
         setIsDeleteConfirmOpen(false);
-        searchStudents({ preventDefault: () => {} });
-      } else {
-        toast.error(response.data.message);
+        fetchStudents();
       }
     } catch (error) {
       toast.dismiss();
@@ -358,618 +351,678 @@ const Student = () => {
   };
 
   const resetForm = () => {
-    setFormData({
-      firstName: "",
-      middleName: "",
-      lastName: "",
-      phone: "",
-      semester: "",
-      branchId: "",
-      classId: "",
-      gender: "",
-      dob: "",
-      address: "",
-      city: "",
-      state: "",
-      pincode: "",
-      country: "",
-      profile: "",
-      status: "active",
-      bloodGroup: "",
-      emergencyContact: {
-        name: "",
-        relationship: "",
-        phone: "",
-      },
-    });
-    setShowAddForm(false);
+    setFormData(INITIAL_FORM_DATA);
+    setShowModal(false);
     setIsEditing(false);
     setSelectedStudentId(null);
     setFile(null);
   };
 
   return (
-    <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
-      <div className="flex justify-between items-center w-full">
+    <div className="screen-shell">
+      <div className="action-bar">
         <Heading
           title="Gestion des etudiants"
-          subtitle="Recherchez les etudiants par filiere, semestre ou classe et gerez leur dossier."
+          subtitle="Rattachez chaque etudiant a son annee academique, sa promotion, son departement, sa filiere et sa classe."
         />
-        {branches.length > 0 && (
-          <CustomButton onClick={() => {
-            resetForm();
-            setShowAddForm(true);
-          }}>
-            <IoMdAdd className="text-2xl" />
-            Ajouter
-          </CustomButton>
-        )}
+        <CustomButton
+          onClick={() => setShowModal(true)}
+          className="module-action-button"
+        >
+          <IoMdAdd className="text-xl" />
+          Nouvel etudiant
+        </CustomButton>
       </div>
 
-      {dataLoading && !showAddForm && !hasSearched && (
-        <div className="mt-6 w-full">
-          <Loading label="Preparation de l'espace etudiant..." />
+      <div className="metric-grid">
+        {stats.map((stat) => (
+          <div key={stat.label} className="panel-section px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {stat.label}
+            </p>
+            <p className="mt-3 text-3xl font-extrabold text-slate-900">
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="filter-card">
+        <div className="section-header">
+          <p className="section-kicker">Filtres</p>
+          <h2 className="section-title">Affiner les etudiants</h2>
+        </div>
+        <div className="mt-5 filter-grid-5">
+          <div className="field-group">
+            <label className="field-label">Recherche</label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, search: event.target.value }))
+              }
+              placeholder="Nom ou numero d'inscription"
+            />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Annee academique</label>
+            <select
+              value={filters.academicYearId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  academicYearId: event.target.value,
+                  classId: "",
+                  promotionId: "",
+                }))
+              }
+            >
+              <option value="">Toutes les annees</option>
+              {academicYears.map((academicYear) => (
+                <option key={academicYear._id} value={academicYear._id}>
+                  {academicYear.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Departement</label>
+            <select
+              value={filters.departmentId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  departmentId: event.target.value,
+                  branchId: "",
+                  classId: "",
+                  promotionId: "",
+                }))
+              }
+            >
+              <option value="">Tous les departements</option>
+              {departments.map((department) => (
+                <option key={department._id} value={department._id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Filiere</label>
+            <select
+              value={filters.branchId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  branchId: event.target.value,
+                  classId: "",
+                  promotionId: "",
+                }))
+              }
+            >
+              <option value="">Toutes les filieres</option>
+              {branches
+                .filter((branch) =>
+                  filters.departmentId
+                    ? branch.departmentId?._id === filters.departmentId
+                    : true
+                )
+                .map((branch) => (
+                  <option key={branch._id} value={branch._id}>
+                    {branch.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Classe</label>
+            <select
+              value={filters.classId}
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, classId: event.target.value }))
+              }
+            >
+              <option value="">Toutes les classes</option>
+              {filteredClasses.map((academicClass) => (
+                <option key={academicClass._id} value={academicClass._id}>
+                  {getAcademicClassLabel(academicClass)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 filter-grid-2">
+          <div className="field-group">
+            <label className="field-label">Promotion</label>
+            <select
+              value={filters.promotionId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  promotionId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Toutes les promotions</option>
+              {filteredPromotions.map((promotion) => (
+                <option key={promotion._id} value={promotion._id}>
+                  {promotion.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Semestre</label>
+            <select
+              value={filters.semester}
+              onChange={(event) =>
+                setFilters((current) => ({ ...current, semester: event.target.value }))
+              }
+            >
+              <option value="">Tous les semestres</option>
+              {studentFilterSemesterOptions.map((semester) => (
+                <option key={semester} value={semester}>
+                  {formatSemesterLabel(semester)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {dataLoading ? (
+        <div className="mt-8">
+          <Loading label="Chargement des etudiants..." />
+        </div>
+      ) : visibleStudents.length === 0 ? (
+        <div className="mt-8">
+          <NoData
+            title="Aucun etudiant"
+            description="Ajoutez des etudiants ou adaptez vos filtres pour afficher les inscriptions."
+          />
+        </div>
+      ) : (
+        <div className="table-shell">
+          <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900 text-white">
+              <tr>
+                <th className="px-5 py-4 text-left">Etudiant</th>
+                <th className="px-5 py-4 text-left">Parcours</th>
+                <th className="px-5 py-4 text-left">Contact</th>
+                <th className="px-5 py-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleStudents.map((student) => (
+                <tr key={student._id} className="border-t border-slate-100">
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {[student.firstName, student.middleName, student.lastName]
+                        .filter(Boolean)
+                        .join(" ")}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {student.enrollmentNo} | {getStatusLabel(student.status)}
+                    </p>
+                  </td>
+                  <td className="px-5 py-4 text-slate-600">
+                    <p>{student.departmentId?.name || "Sans departement"}</p>
+                    <p>{student.branchId?.name || "Sans filiere"}</p>
+                    <p>{getAcademicClassLabel(student.classId)}</p>
+                    <p>{student.promotionId?.name || "Sans promotion"}</p>
+                    <p>{student.academicYearId?.name || "Annee active"}</p>
+                  </td>
+                  <td className="px-5 py-4 text-slate-600">
+                    <p>{student.email}</p>
+                    <p>{student.phone}</p>
+                    <p>{formatSemesterLabel(student.semester)}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex justify-center gap-2">
+                      <CustomButton
+                        variant="secondary"
+                        className="!p-2"
+                        onClick={() => {
+                          setFormData({
+                            firstName: student.firstName || "",
+                            middleName: student.middleName || "",
+                            lastName: student.lastName || "",
+                            phone: student.phone || "",
+                            semester: student.semester || "",
+                            branchId: student.branchId?._id || "",
+                            departmentId: student.departmentId?._id || "",
+                            classId: student.classId?._id || "",
+                            academicYearId: student.academicYearId?._id || "",
+                            promotionId: student.promotionId?._id || "",
+                            entryYear: student.entryYear || "",
+                            gender: student.gender || "",
+                            dob: student.dob?.split("T")[0] || "",
+                            address: student.address || "",
+                            city: student.city || "",
+                            state: student.state || "",
+                            pincode: student.pincode || "",
+                            country: student.country || getDefaultCountryLabel(),
+                            profile: student.profile || "",
+                            status: student.status || "active",
+                            bloodGroup: student.bloodGroup || "",
+                            emergencyContact: {
+                              name: student.emergencyContact?.name || "",
+                              relationship: student.emergencyContact?.relationship || "",
+                              phone: student.emergencyContact?.phone || "",
+                            },
+                          });
+                          setSelectedStudentId(student._id);
+                          setIsEditing(true);
+                          setShowModal(true);
+                        }}
+                      >
+                        <MdEdit />
+                      </CustomButton>
+                      <CustomButton
+                        variant="danger"
+                        className="!p-2"
+                        onClick={() => {
+                          setSelectedStudentId(student._id);
+                          setIsDeleteConfirmOpen(true);
+                        }}
+                      >
+                        <MdOutlineDelete />
+                      </CustomButton>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
         </div>
       )}
 
-      {branches.length > 0 && (
-        <div className="my-6 mx-auto w-full">
-          <form onSubmit={searchStudents} className="flex items-center">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 w-[90%] mx-auto">
+      {showModal ? (
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-6xl">
+            <div className="modal-header">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Numero d'inscription
-                </label>
-                <input
-                  type="text"
-                  name="enrollmentNo"
-                  value={searchParams.enrollmentNo}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Saisir le numero d'inscription"
-                />
+                <h2 className="section-title">
+                  {isEditing ? "Modifier l'etudiant" : "Ajouter un etudiant"}
+                </h2>
+                <p className="section-subtitle">
+                  Renseignez l'identite, l'affectation academique, l'adresse et
+                  le contact d'urgence dans une structure plus lisible.
+                </p>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={searchParams.name}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Saisir le nom de l'etudiant"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
-                <select
-                  name="semester"
-                  value={searchParams.semester}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Choisir un semestre</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                    <option key={sem} value={sem}>
-                      {formatSemesterLabel(sem)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Filiere
-                </label>
-                <select
-                  name="branch"
-                  value={searchParams.branch}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Choisir une filiere</option>
-                  {branches?.map((branch) => (
-                    <option key={branch._id} value={branch._id}>
-                      {branch.name}
-                    </option>
-                    ))}
-                  </select>
-                </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Classe
-                </label>
-                <select
-                  name="classId"
-                  value={searchParams.classId}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Choisir une classe</option>
-                  {filteredSearchClasses?.map((academicClass) => (
-                    <option key={academicClass._id} value={academicClass._id}>
-                      {getAcademicClassLabel(academicClass)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-center w-[10%] mx-auto">
               <CustomButton
-                type="submit"
-                disabled={dataLoading}
-                variant="primary"
+                variant="secondary"
+                className="!rounded-xl !p-2.5"
+                onClick={resetForm}
               >
-                {dataLoading ? "Recherche..." : "Rechercher"}
+                <IoMdClose className="text-2xl" />
               </CustomButton>
             </div>
-          </form>
 
-          {!hasSearched && (
-            <div className="text-center mt-8 text-gray-600 flex flex-col items-center justify-center my-10 bg-white p-10 rounded-lg mx-auto w-[40%]">
-              <img
-                src="/assets/filter.svg"
-                alt="Choisir des filtres"
-                className="w-64 h-64 mb-4"
-              />
-              Veuillez choisir au moins un filtre pour rechercher des etudiants
-            </div>
-          )}
+            <form onSubmit={addStudentHandler}>
+              <div className="modal-body space-y-6">
+                <FormSection
+                  title="Informations personnelles"
+                  subtitle="Identite, etat civil et statut du compte etudiant."
+                >
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    <FileUpload
+                      label="Photo de profil"
+                      fileName={file?.name || formData.profile}
+                      accept="image/*"
+                      onChange={(event) => setFile(event.target.files[0])}
+                    />
 
-          {hasSearched && students.length === 0 && (
-            <NoData title="Aucun etudiant trouve" />
-          )}
+                    <div className="field-group">
+                      <label className="field-label">Prenom</label>
+                      <input
+                        type="text"
+                        value={formData.firstName}
+                        onChange={(event) =>
+                          handleFormInputChange("firstName", event.target.value)
+                        }
+                      />
+                    </div>
 
-          {students && students.length > 0 && (
-            <div className="mt-8">
-              <h2 className="text-xl font-semibold mb-4">Resultats de recherche</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full bg-white border border-gray-300">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="px-6 py-3 border-b text-left">Profil</th>
-                      <th className="px-6 py-3 border-b text-left">Nom</th>
-                      <th className="px-6 py-3 border-b text-left">
-                        No inscription
-                      </th>
-                      <th className="px-6 py-3 border-b text-left">Semestre</th>
-                      <th className="px-6 py-3 border-b text-left">Filiere</th>
-                      <th className="px-6 py-3 border-b text-left">Classe</th>
-                      <th className="px-6 py-3 border-b text-left">E-mail</th>
-                      <th className="px-6 py-3 border-b text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {students.map((student) => (
-                      <tr key={student._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 border-b">
-                          <img
-                            src={`${process.env.REACT_APP_MEDIA_LINK}/${student.profile}`}
-                            alt={
-                              [student.firstName, student.middleName, student.lastName]
-                                .filter(Boolean)
-                                .join(" ") || "Etudiant"
-                            }
-                            className="w-12 h-12 object-cover rounded-full"
-                            onError={(e) => {
-                              e.target.src =
-                                "https://images.unsplash.com/photo-1744315900478-fa44dc6a4e89?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-                            }}
-                          />
-                        </td>
-                        <td className="px-6 py-4 border-b">
-                          {student.firstName} {student.middleName}{" "}
-                          {student.lastName}
-                        </td>
-                        <td className="px-6 py-4 border-b">
-                          {student.enrollmentNo}
-                        </td>
-                        <td className="px-6 py-4 border-b">
-                          {formatSemesterLabel(student.semester)}
-                        </td>
-                        <td className="px-6 py-4 border-b">
-                          {student.branchId?.name}
-                        </td>
-                        <td className="px-6 py-4 border-b">
-                          {getAcademicClassLabel(student.classId)}
-                        </td>
-                        <td className="px-6 py-4 border-b">{student.email}</td>
-                        <td className="px-6 py-4 border-b text-center">
-                          <div className="flex justify-center gap-2">
-                            <CustomButton
-                              variant="secondary"
-                              className="!p-2"
-                              onClick={() => editStudentHandler(student)}
-                            >
-                              <MdEdit />
-                            </CustomButton>
-                            <CustomButton
-                              variant="danger"
-                              className="!p-2"
-                              onClick={() => deleteStudentHandler(student._id)}
-                            >
-                              <MdOutlineDelete />
-                            </CustomButton>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+                    <div className="field-group">
+                      <label className="field-label">Postnom</label>
+                      <input
+                        type="text"
+                        value={formData.middleName}
+                        onChange={(event) =>
+                          handleFormInputChange("middleName", event.target.value)
+                        }
+                      />
+                    </div>
 
-      {branches.length === 0 && (
-        <div className="flex justify-center items-center flex-col w-full mt-24">
-          <CgDanger className="w-16 h-16 text-yellow-500 mb-4" />
-          <p className="text-center text-lg">
-            Veuillez ajouter des filieres avant d'ajouter un etudiant.
-          </p>
-        </div>
-      )}
+                    <div className="field-group">
+                      <label className="field-label">Nom</label>
+                      <input
+                        type="text"
+                        value={formData.lastName}
+                        onChange={(event) =>
+                          handleFormInputChange("lastName", event.target.value)
+                        }
+                      />
+                    </div>
 
-      {showAddForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 w-[90%] max-w-4xl max-h-[90vh] overflow-y-auto relative">
-            <button
-              onClick={resetForm}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
-            >
-              <IoMdClose className="text-2xl" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-6">
-              {isEditing ? "Modifier l'etudiant" : "Ajouter un etudiant"}
-            </h2>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addStudentHandler();
-              }}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Prenom
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.firstName}
-                    onChange={(e) =>
-                      handleFormInputChange("firstName", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Telephone</label>
+                      <input
+                        type="text"
+                        value={formData.phone}
+                        onChange={(event) =>
+                          handleFormInputChange("phone", event.target.value)
+                        }
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Deuxieme prenom
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.middleName}
-                    onChange={(e) =>
-                      handleFormInputChange("middleName", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Annee d'entree</label>
+                      <input
+                        type="number"
+                        value={formData.entryYear}
+                        onChange={(event) =>
+                          handleFormInputChange("entryYear", event.target.value)
+                        }
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nom
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.lastName}
-                    onChange={(e) =>
-                      handleFormInputChange("lastName", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Date de naissance</label>
+                      <input
+                        type="date"
+                        value={formData.dob}
+                        onChange={(event) =>
+                          handleFormInputChange("dob", event.target.value)
+                        }
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      handleFormInputChange("phone", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Genre</label>
+                      <select
+                        value={formData.gender}
+                        onChange={(event) =>
+                          handleFormInputChange("gender", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir un genre</option>
+                        <option value="male">Homme</option>
+                        <option value="female">Femme</option>
+                        <option value="other">Autre</option>
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
-                  <select
-                    value={formData.semester}
-                    onChange={(e) =>
-                      handleFormInputChange("semester", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Choisir un semestre</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                      <option key={sem} value={sem}>
-                        {formatSemesterLabel(sem)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Groupe sanguin</label>
+                      <select
+                        value={formData.bloodGroup}
+                        onChange={(event) =>
+                          handleFormInputChange("bloodGroup", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir un groupe sanguin</option>
+                        {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
+                          (group) => (
+                            <option key={group} value={group}>
+                              {group}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
 
-                <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Filiere
-                  </label>
-                  <select
-                    value={formData.branchId}
-                    onChange={(e) =>
-                      handleFormInputChange("branchId", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Choisir une filiere</option>
-                    {branches?.map((branch) => (
-                      <option key={branch._id} value={branch._id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Statut</label>
+                      <select
+                        value={formData.status}
+                        onChange={(event) =>
+                          handleFormInputChange("status", event.target.value)
+                        }
+                      >
+                        <option value="active">Actif</option>
+                        <option value="inactive">Inactif</option>
+                      </select>
+                    </div>
+                  </div>
+                </FormSection>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Classe
-                  </label>
-                  <select
-                    value={formData.classId}
-                    onChange={(e) =>
-                      handleFormInputChange("classId", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Aucune classe specifique</option>
-                    {filteredFormClasses?.map((academicClass) => (
-                      <option key={academicClass._id} value={academicClass._id}>
-                        {getAcademicClassLabel(academicClass)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <FormSection
+                  title="Informations academiques"
+                  subtitle="Affectation a l'annee, au departement, a la filiere, a la classe et a la promotion."
+                >
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="field-group">
+                      <label className="field-label">Annee academique</label>
+                      <select
+                        value={formData.academicYearId}
+                        onChange={(event) =>
+                          handleFormInputChange(
+                            "academicYearId",
+                            event.target.value
+                          )
+                        }
+                      >
+                        <option value="">Annee academique active</option>
+                        {academicYears.map((academicYear) => (
+                          <option key={academicYear._id} value={academicYear._id}>
+                            {academicYear.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Genre</label>
-                  <select
-                    value={formData.gender}
-                    onChange={(e) =>
-                      handleFormInputChange("gender", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Choisir un genre</option>
-                    <option value="male">Homme</option>
-                    <option value="female">Femme</option>
-                    <option value="other">Autre</option>
-                  </select>
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Departement</label>
+                      <select
+                        value={formData.departmentId}
+                        onChange={(event) =>
+                          handleFormInputChange("departmentId", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir un departement</option>
+                        {departments.map((department) => (
+                          <option key={department._id} value={department._id}>
+                            {department.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date de naissance
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) =>
-                      handleFormInputChange("dob", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Filiere</label>
+                      <select
+                        value={formData.branchId}
+                        onChange={(event) =>
+                          handleFormInputChange("branchId", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir une filiere</option>
+                        {filteredBranches.map((branch) => (
+                          <option key={branch._id} value={branch._id}>
+                            {branch.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Groupe sanguin
-                  </label>
-                  <select
-                    value={formData.bloodGroup}
-                    onChange={(e) =>
-                      handleFormInputChange("bloodGroup", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Choisir un groupe sanguin</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                  </select>
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Classe</label>
+                      <select
+                        value={formData.classId}
+                        onChange={(event) =>
+                          handleFormInputChange("classId", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir une classe</option>
+                        {filteredClasses.map((academicClass) => (
+                          <option key={academicClass._id} value={academicClass._id}>
+                            {getAcademicClassLabel(academicClass)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Photo de profil
-                  </label>
-                  <input
-                    type="file"
-                    onChange={(e) => setFile(e.target.files[0])}
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    accept="image/*"
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Promotion</label>
+                      <select
+                        value={formData.promotionId}
+                        onChange={(event) =>
+                          handleFormInputChange("promotionId", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir une promotion</option>
+                        {filteredPromotions.map((promotion) => (
+                          <option key={promotion._id} value={promotion._id}>
+                            {promotion.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Adresse</label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) =>
-                      handleFormInputChange("address", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+                    <div className="field-group">
+                      <label className="field-label">Semestre</label>
+                      <select
+                        value={formData.semester}
+                        onChange={(event) =>
+                          handleFormInputChange("semester", event.target.value)
+                        }
+                      >
+                        <option value="">Choisir un semestre</option>
+                        {studentFormSemesterOptions.map((semester) => (
+                          <option key={semester} value={semester}>
+                            {formatSemesterLabel(semester)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </FormSection>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ville</label>
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={(e) =>
-                      handleFormInputChange("city", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+                <FormSection
+                  title="Adresse"
+                  subtitle="Coordonnees de residence de l'etudiant."
+                >
+                  <div className="grid gap-5 md:grid-cols-[1.2fr_0.8fr]">
+                    <div className="field-group">
+                      <label className="field-label">Adresse complete</label>
+                      <textarea
+                        value={formData.address}
+                        onChange={(event) =>
+                          handleFormInputChange("address", event.target.value)
+                        }
+                        rows={5}
+                      />
+                    </div>
+                    <div className="grid gap-4">
+                      <div className="field-group">
+                        <label className="field-label">Ville</label>
+                        <input
+                          type="text"
+                          value={formData.city}
+                          onChange={(event) =>
+                            handleFormInputChange("city", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="field-group">
+                        <label className="field-label">Region</label>
+                        <input
+                          type="text"
+                          value={formData.state}
+                          onChange={(event) =>
+                            handleFormInputChange("state", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="field-group">
+                        <label className="field-label">Code postal</label>
+                        <input
+                          type="text"
+                          value={formData.pincode}
+                          onChange={(event) =>
+                            handleFormInputChange("pincode", event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="field-group">
+                        <label className="field-label">Pays</label>
+                        <input
+                          type="text"
+                          value={formData.country}
+                          onChange={(event) =>
+                            handleFormInputChange("country", event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </FormSection>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
-                  <input
-                    type="text"
-                    value={formData.state}
-                    onChange={(e) =>
-                      handleFormInputChange("state", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Code postal
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.pincode}
-                    onChange={(e) =>
-                      handleFormInputChange("pincode", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pays</label>
-                  <input
-                    type="text"
-                    value={formData.country}
-                    onChange={(e) =>
-                      handleFormInputChange("country", e.target.value)
-                    }
-                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Contact d'urgence
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                <FormSection
+                  title="Contact d'urgence"
+                  subtitle="Personne a prevenir en cas d'urgence."
+                >
+                  <div className="grid gap-5 md:grid-cols-3">
+                    <div className="field-group">
+                      <label className="field-label">Nom</label>
                       <input
                         type="text"
                         value={formData.emergencyContact.name}
-                        onChange={(e) =>
-                          handleEmergencyContactChange("name", e.target.value)
+                        onChange={(event) =>
+                          handleEmergencyContactChange("name", event.target.value)
                         }
-                        className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Lien</label>
+                    <div className="field-group">
+                      <label className="field-label">Lien</label>
                       <input
                         type="text"
                         value={formData.emergencyContact.relationship}
-                        onChange={(e) =>
+                        onChange={(event) =>
                           handleEmergencyContactChange(
                             "relationship",
-                            e.target.value
+                            event.target.value
                           )
                         }
-                        className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
+                    <div className="field-group">
+                      <label className="field-label">Telephone</label>
                       <input
-                        type="tel"
+                        type="text"
                         value={formData.emergencyContact.phone}
-                        onChange={(e) =>
-                          handleEmergencyContactChange("phone", e.target.value)
+                        onChange={(event) =>
+                          handleEmergencyContactChange("phone", event.target.value)
                         }
-                        className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
                       />
                     </div>
                   </div>
-                </div>
+                </FormSection>
               </div>
 
-              <div className="mt-8 flex justify-between items-center gap-4">
-                <div>
-                  <p className="text-sm">
-                    L'identifiant par defaut sera{" "}
-                    <span className="font-bold">
-                      {formData.enrollmentNo || "numero_inscription"}@gmail.com
-                    </span>{" "}
-                    et le mot de passe sera{" "}
-                    <span className="font-bold">student123</span>
-                  </p>
-                </div>
-                <div className="flex gap-4">
-                  <CustomButton
-                    type="button"
-                    variant="secondary"
-                    onClick={resetForm}
-                  >
-                    Annuler
-                  </CustomButton>
-                  <CustomButton type="submit" variant="primary">
-                    {isEditing ? "Modifier l'etudiant" : "Ajouter l'etudiant"}
-                  </CustomButton>
-                </div>
+              <div className="modal-footer">
+                <CustomButton type="button" variant="secondary" onClick={resetForm}>
+                  Annuler
+                </CustomButton>
+                <CustomButton type="submit">
+                  {isEditing ? "Mettre a jour" : "Ajouter"}
+                </CustomButton>
               </div>
             </form>
           </div>
         </div>
-      )}
+      ) : null}
 
       <DeleteConfirm
         isOpen={isDeleteConfirmOpen}
         onClose={() => setIsDeleteConfirmOpen(false)}
         onConfirm={confirmDelete}
-        message="Voulez-vous vraiment supprimer cet etudiant ?"
+        title="Archiver cet etudiant ?"
+        message="L'etudiant disparaitra des listes actives tout en restant restorable depuis les archives."
       />
     </div>
   );

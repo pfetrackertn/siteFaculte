@@ -20,6 +20,7 @@ const auth = async (req, res, next) => {
       }
 
       req.userId = decoded.userId;
+      req.userRole = decoded.role ? String(decoded.role).toLowerCase() : null;
       req.token = token;
       next();
     } catch (jwtError) {

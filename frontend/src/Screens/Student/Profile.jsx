@@ -5,6 +5,7 @@ import {
   formatLongDate,
   formatSemesterLabel,
   getAcademicClassLabel,
+  getDefaultCountryLabel,
   getGenderLabel,
 } from "../../utils/displayText";
 
@@ -44,13 +45,10 @@ const StudentProfile = ({ profileData }) => {
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
             <img
               src={`${process.env.REACT_APP_MEDIA_LINK}/${profileData.profile}`}
-              alt={fullName || "Profil etudiant"}
+              alt={fullName || "Avatar etudiant"}
               className="h-28 w-28 rounded-[28px] object-cover ring-4 ring-blue-100"
             />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-                Profil etudiant
-              </p>
               <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
                 {renderValue(fullName)}
               </h1>
@@ -128,8 +126,20 @@ const StudentProfile = ({ profileData }) => {
             />
             <ProfileField label="Filiere" value={profileData.branchId?.name} />
             <ProfileField
+              label="Departement"
+              value={profileData.departmentId?.name}
+            />
+            <ProfileField
               label="Semestre"
               value={formatSemesterLabel(profileData.semester)}
+            />
+            <ProfileField
+              label="Annee academique"
+              value={profileData.academicYearId?.name}
+            />
+            <ProfileField
+              label="Promotion"
+              value={profileData.promotionId?.name}
             />
           </div>
         </section>
@@ -143,7 +153,10 @@ const StudentProfile = ({ profileData }) => {
             <ProfileField label="Ville" value={profileData.city} />
             <ProfileField label="Region" value={profileData.state} />
             <ProfileField label="Code postal" value={profileData.pincode} />
-            <ProfileField label="Pays" value={profileData.country} />
+            <ProfileField
+              label="Pays"
+              value={profileData.country || getDefaultCountryLabel()}
+            />
           </div>
         </section>
 

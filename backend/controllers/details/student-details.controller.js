@@ -1,21 +1,38 @@
 const studentDetails = require("../../models/details/student-details.model");
 const resetToken = require("../../models/reset-password.model");
 const AcademicClass = require("../../models/class.model");
+const Branch = require("../../models/branch.model");
+const Promotion = require("../../models/promotion.model");
 const bcrypt = require("bcryptjs");
 const ApiResponse = require("../../utils/ApiResponse");
 const jwt = require("jsonwebtoken");
 const sendResetMail = require("../../utils/SendMail");
+const { getArchiveFilter, buildArchiveUpdate } = require("../../utils/archive");
+const { resolveAcademicYearId } = require("../../utils/academic-year");
 
 const applyStudentPopulate = (query) =>
   query
-    .populate("branchId", "name branchId")
+    .populate("branchId", "name branchId departmentId")
+    .populate("departmentId", "name code")
+    .populate("promotionId", "name code intakeYear")
+    .populate("academicYearId", "name isActive")
     .populate({
       path: "classId",
-      select: "name code semester branchId status",
-      populate: {
-        path: "branchId",
-        select: "name branchId",
-      },
+      select: "name code semester branchId status academicYearId departmentId level",
+      populate: [
+        {
+          path: "branchId",
+          select: "name branchId",
+        },
+        {
+          path: "academicYearId",
+          select: "name isActive",
+        },
+        {
+          path: "departmentId",
+          select: "name code",
+        },
+      ],
     });
 
 const normalizeClassId = (classId) => {
@@ -30,6 +47,8 @@ const ensureClassMatchesAcademicContext = async ({
   classId,
   branchId,
   semester,
+  academicYearId,
+  departmentId,
 }) => {
   if (!classId) {
     return { academicClass: null };
@@ -41,10 +60,7 @@ const ensureClassMatchesAcademicContext = async ({
     return { error: "Classe introuvable" };
   }
 
-  if (
-    branchId &&
-    academicClass.branchId.toString() !== branchId.toString()
-  ) {
+  if (branchId && academicClass.branchId.toString() !== branchId.toString()) {
     return {
       error: "La classe selectionnee ne correspond pas a la filiere choisie",
     };
@@ -53,6 +69,28 @@ const ensureClassMatchesAcademicContext = async ({
   if (semester && Number(academicClass.semester) !== Number(semester)) {
     return {
       error: "La classe selectionnee ne correspond pas au semestre choisi",
+    };
+  }
+
+  if (
+    academicYearId &&
+    academicClass.academicYearId &&
+    academicClass.academicYearId.toString() !== academicYearId.toString()
+  ) {
+    return {
+      error:
+        "La classe selectionnee ne correspond pas a l'annee academique choisie",
+    };
+  }
+
+  if (
+    departmentId &&
+    academicClass.departmentId &&
+    academicClass.departmentId.toString() !== departmentId.toString()
+  ) {
+    return {
+      error:
+        "La classe selectionnee ne correspond pas au departement selectionne",
     };
   }
 
@@ -71,14 +109,56 @@ const generateEnrollmentNo = async () => {
   return enrollmentNo;
 };
 
+const buildStudentAcademicContext = async (payload) => {
+  const branch = await Branch.findById(payload.branchId);
+  if (!branch) {
+    return { error: "Filiere introuvable" };
+  }
+
+  const classId = normalizeClassId(payload.classId);
+  const academicYearId = await resolveAcademicYearId(payload.academicYearId);
+  const departmentId = payload.departmentId || branch.departmentId || null;
+
+  const classValidation = await ensureClassMatchesAcademicContext({
+    classId,
+    branchId: payload.branchId,
+    semester: payload.semester,
+    academicYearId,
+    departmentId,
+  });
+
+  if (classValidation.error) {
+    return { error: classValidation.error };
+  }
+
+  if (payload.promotionId) {
+    const promotion = await Promotion.findById(payload.promotionId);
+    if (!promotion) {
+      return { error: "Promotion introuvable" };
+    }
+  }
+
+  return {
+    branch,
+    classId,
+    academicYearId: academicYearId || classValidation.academicClass?.academicYearId || null,
+    departmentId:
+      departmentId || classValidation.academicClass?.departmentId || null,
+  };
+};
+
 const loginStudentController = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await studentDetails.findOne({ email });
 
-    if (!user) {
+    if (!user || user.isArchived) {
       return ApiResponse.notFound("Utilisateur introuvable").send(res);
+    }
+
+    if (user.status === "inactive") {
+      return ApiResponse.forbidden("Ce compte etudiant est inactif").send(res);
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -87,13 +167,17 @@ const loginStudentController = async (req, res) => {
       return ApiResponse.unauthorized("Mot de passe invalide").send(res);
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { userId: user._id, role: "Student" },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
 
     return ApiResponse.success({ token }, "Connexion reussie").send(res);
   } catch (error) {
-    console.error("Login Error: ", error);
+    console.error("Login Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -101,10 +185,10 @@ const loginStudentController = async (req, res) => {
 const getAllDetailsController = async (req, res) => {
   try {
     const users = await applyStudentPopulate(
-      studentDetails.find().select("-__v -password")
+      studentDetails.find(getArchiveFilter(req.query)).select("-__v -password")
     );
 
-    if (!users || users.length === 0) {
+    if (!users.length) {
       return ApiResponse.notFound("Aucun etudiant trouve").send(res);
     }
 
@@ -112,7 +196,7 @@ const getAllDetailsController = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("Get Details Error: ", error);
+    console.error("Get Details Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -120,15 +204,10 @@ const getAllDetailsController = async (req, res) => {
 const registerStudentController = async (req, res) => {
   try {
     const profile = req.file?.filename || "";
-    const normalizedClassId = normalizeClassId(req.body.classId);
-    const classValidation = await ensureClassMatchesAcademicContext({
-      classId: normalizedClassId,
-      branchId: req.body.branchId,
-      semester: req.body.semester,
-    });
+    const context = await buildStudentAcademicContext(req.body);
 
-    if (classValidation.error) {
-      return ApiResponse.badRequest(classValidation.error).send(res);
+    if (context.error) {
+      return ApiResponse.badRequest(context.error).send(res);
     }
 
     const enrollmentNo = await generateEnrollmentNo();
@@ -136,7 +215,10 @@ const registerStudentController = async (req, res) => {
 
     const user = await studentDetails.create({
       ...req.body,
-      classId: normalizedClassId,
+      classId: context.classId,
+      departmentId: context.departmentId,
+      academicYearId: context.academicYearId,
+      entryYear: req.body.entryYear ? Number(req.body.entryYear) : null,
       profile,
       password: "student123",
       email,
@@ -151,7 +233,7 @@ const registerStudentController = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("Add Details Error: ", error);
+    console.error("Add Details Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -170,7 +252,7 @@ const getMyDetailsController = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("Get My Details Error: ", error);
+    console.error("Get My Details Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -210,7 +292,7 @@ const updateDetailsController = async (req, res) => {
     if (phone) {
       const existingStudent = await studentDetails.findOne({
         _id: { $ne: req.params.id },
-        phone: phone,
+        phone,
       });
 
       if (existingStudent) {
@@ -223,7 +305,7 @@ const updateDetailsController = async (req, res) => {
     if (email) {
       const existingStudent = await studentDetails.findOne({
         _id: { $ne: req.params.id },
-        email: email,
+        email,
       });
 
       if (existingStudent) {
@@ -234,7 +316,7 @@ const updateDetailsController = async (req, res) => {
     if (enrollmentNo) {
       const existingStudent = await studentDetails.findOne({
         _id: { $ne: req.params.id },
-        enrollmentNo: enrollmentNo,
+        enrollmentNo,
       });
 
       if (existingStudent) {
@@ -245,43 +327,53 @@ const updateDetailsController = async (req, res) => {
     }
 
     if (password) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(password, salt);
+      updateData.password = await bcrypt.hash(password, 10);
     }
 
     if (req.file) {
       updateData.profile = req.file.filename;
     }
 
-    if (Object.prototype.hasOwnProperty.call(updateData, "classId")) {
-      updateData.classId = normalizeClassId(updateData.classId);
-    }
-
-    const classIdToValidate = Object.prototype.hasOwnProperty.call(
-      updateData,
-      "classId"
-    )
-      ? updateData.classId
-      : currentUser.classId;
-
-    const branchIdToValidate = updateData.branchId || currentUser.branchId;
-    const semesterToValidate = updateData.semester || currentUser.semester;
-
-    const classValidation = await ensureClassMatchesAcademicContext({
-      classId: classIdToValidate,
-      branchId: branchIdToValidate,
-      semester: semesterToValidate,
+    const context = await buildStudentAcademicContext({
+      branchId: updateData.branchId || currentUser.branchId,
+      semester: updateData.semester || currentUser.semester,
+      classId: Object.prototype.hasOwnProperty.call(updateData, "classId")
+        ? updateData.classId
+        : currentUser.classId,
+      academicYearId: Object.prototype.hasOwnProperty.call(
+        updateData,
+        "academicYearId"
+      )
+        ? updateData.academicYearId
+        : currentUser.academicYearId,
+      departmentId: Object.prototype.hasOwnProperty.call(
+        updateData,
+        "departmentId"
+      )
+        ? updateData.departmentId
+        : currentUser.departmentId,
+      promotionId: Object.prototype.hasOwnProperty.call(
+        updateData,
+        "promotionId"
+      )
+        ? updateData.promotionId
+        : currentUser.promotionId,
     });
 
-    if (classValidation.error) {
-      return ApiResponse.badRequest(classValidation.error).send(res);
+    if (context.error) {
+      return ApiResponse.badRequest(context.error).send(res);
+    }
+
+    updateData.classId = context.classId;
+    updateData.departmentId = context.departmentId;
+    updateData.academicYearId = context.academicYearId;
+
+    if (updateData.entryYear) {
+      updateData.entryYear = Number(updateData.entryYear);
     }
 
     if (updateData.dob) {
       updateData.dob = new Date(updateData.dob);
-    }
-    if (updateData.joiningDate) {
-      updateData.joiningDate = new Date(updateData.joiningDate);
     }
 
     const updatedUser = await applyStudentPopulate(
@@ -295,7 +387,7 @@ const updateDetailsController = async (req, res) => {
       "Etudiant mis a jour avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Update Details Error: ", error);
+    console.error("Update Details Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -307,17 +399,19 @@ const deleteDetailsController = async (req, res) => {
         .send(res);
     }
 
-    const user = await studentDetails.findById(req.params.id);
+    const user = await studentDetails.findByIdAndUpdate(
+      req.params.id,
+      buildArchiveUpdate(true, "Suppression logique depuis le module etudiant"),
+      { new: true }
+    );
 
     if (!user) {
       return ApiResponse.notFound("Aucun etudiant trouve").send(res);
     }
 
-    await studentDetails.findByIdAndDelete(req.params.id);
-
-    return ApiResponse.success(null, "Etudiant supprime avec succes").send(res);
+    return ApiResponse.success(null, "Etudiant archive avec succes").send(res);
   } catch (error) {
-    console.error("Delete Details Error: ", error);
+    console.error("Delete Details Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -362,7 +456,7 @@ const sendForgetPasswordEmail = async (req, res) => {
       "E-mail de reinitialisation envoye avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Send Reset Mail Error: ", error);
+    console.error("Send Reset Mail Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -394,8 +488,7 @@ const updatePasswordHandler = async (req, res) => {
       return ApiResponse.notFound("Jeton expire").send(res);
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     await studentDetails.findByIdAndUpdate(verifyToken._id, {
       password: hashedPassword,
@@ -408,17 +501,37 @@ const updatePasswordHandler = async (req, res) => {
 
     return ApiResponse.success(null, "Mot de passe mis a jour").send(res);
   } catch (error) {
-    console.error("Update Password Error: ", error);
+    console.error("Update Password Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
 
 const searchStudentsController = async (req, res) => {
   try {
-    const { enrollmentNo, name, semester, branch, classId } = req.body;
-    let query = {};
+    const {
+      enrollmentNo,
+      name,
+      semester,
+      branch,
+      classId,
+      departmentId,
+      promotionId,
+      academicYearId,
+    } = req.body;
+    const query = {
+      ...getArchiveFilter(req.query),
+    };
 
-    if (!enrollmentNo && !name && !semester && !branch && !classId) {
+    if (
+      !enrollmentNo &&
+      !name &&
+      !semester &&
+      !branch &&
+      !classId &&
+      !departmentId &&
+      !promotionId &&
+      !academicYearId
+    ) {
       return ApiResponse.badRequest(
         "Veuillez selectionner au moins un filtre"
       ).send(res);
@@ -437,7 +550,7 @@ const searchStudentsController = async (req, res) => {
     }
 
     if (semester) {
-      query.semester = semester;
+      query.semester = Number(semester);
     }
 
     if (branch) {
@@ -448,6 +561,18 @@ const searchStudentsController = async (req, res) => {
       query.classId = classId;
     }
 
+    if (departmentId) {
+      query.departmentId = departmentId;
+    }
+
+    if (promotionId) {
+      query.promotionId = promotionId;
+    }
+
+    if (academicYearId) {
+      query.academicYearId = academicYearId;
+    }
+
     const students = await applyStudentPopulate(
       studentDetails
         .find(query)
@@ -455,7 +580,7 @@ const searchStudentsController = async (req, res) => {
         .sort({ enrollmentNo: 1 })
     );
 
-    if (!students || students.length === 0) {
+    if (!students.length) {
       return ApiResponse.notFound("Aucun etudiant trouve").send(res);
     }
 
@@ -463,7 +588,7 @@ const searchStudentsController = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("Search Students Error: ", error);
+    console.error("Search Students Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -500,8 +625,7 @@ const updateLoggedInPasswordController = async (req, res) => {
       ).send(res);
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await studentDetails.findByIdAndUpdate(userId, {
       password: hashedPassword,
@@ -512,7 +636,7 @@ const updateLoggedInPasswordController = async (req, res) => {
       "Mot de passe mis a jour avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Update Password Error: ", error);
+    console.error("Update Password Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };

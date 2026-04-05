@@ -1,17 +1,46 @@
 const facultyDetails = require("../../models/details/faculty-details.model");
 const resetToken = require("../../models/reset-password.model");
+const Branch = require("../../models/branch.model");
+const AcademicClass = require("../../models/class.model");
 const bcrypt = require("bcryptjs");
 const ApiResponse = require("../../utils/ApiResponse");
 const jwt = require("jsonwebtoken");
 const sendResetMail = require("../../utils/SendMail");
+const { getArchiveFilter } = require("../../utils/archive");
+const { resolveAcademicYearId } = require("../../utils/academic-year");
+
+const applyFacultyPopulate = (query) =>
+  query
+    .populate("branchId", "name branchId")
+    .populate("departmentId", "name code")
+    .populate("academicYearId", "name isActive")
+    .populate("assignedClassIds", "name code level semester");
+
+const generateEmployeeId = async () => {
+  let employeeId;
+  let exists = true;
+
+  while (exists) {
+    employeeId = Math.floor(100000 + Math.random() * 900000);
+    exists = await facultyDetails.exists({ employeeId });
+  }
+
+  return employeeId;
+};
 
 const loginFacultyController = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await facultyDetails.findOne({ email });
 
-    if (!user) {
+    if (!user || user.isArchived) {
       return ApiResponse.notFound("Utilisateur introuvable").send(res);
+    }
+
+    if (user.status === "inactive") {
+      return ApiResponse.forbidden("Ce compte enseignant est inactif").send(
+        res
+      );
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -19,39 +48,43 @@ const loginFacultyController = async (req, res) => {
       return ApiResponse.unauthorized("Mot de passe invalide").send(res);
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { userId: user._id, role: "Faculty" },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
 
     return ApiResponse.success({ token }, "Connexion reussie").send(res);
   } catch (error) {
-    console.error("Login Error: ", error);
+    console.error("Login Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
 
 const getAllFacultyController = async (req, res) => {
   try {
-    const users = await facultyDetails.find().select("-__v -password");
-    if (!users || users.length === 0) {
+    const users = await applyFacultyPopulate(
+      facultyDetails.find(getArchiveFilter(req.query)).select("-__v -password")
+    );
+
+    if (!users.length) {
       return ApiResponse.notFound("Aucun enseignant trouve").send(res);
     }
+
     return ApiResponse.success(users, "Details des enseignants charges").send(
       res
     );
   } catch (error) {
-    console.error("Get All Faculty Error: ", error);
+    console.error("Get All Faculty Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
 
-const generateEmployeeId = () => {
-  return Math.floor(100000 + Math.random() * 900000);
-};
-
 const registerFacultyController = async (req, res) => {
   try {
-    const { email, phone } = req.body;
+    const { email, phone, branchId } = req.body;
     const profile = req.file?.filename || "";
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -64,6 +97,11 @@ const registerFacultyController = async (req, res) => {
       ).send(res);
     }
 
+    const branch = await Branch.findById(branchId);
+    if (!branch) {
+      return ApiResponse.notFound("Filiere introuvable").send(res);
+    }
+
     const existing = await facultyDetails.findOne({
       $or: [{ phone }, { email }],
     });
@@ -73,24 +111,46 @@ const registerFacultyController = async (req, res) => {
       ).send(res);
     }
 
-    const employeeId = generateEmployeeId();
+    const employeeId = await generateEmployeeId();
+    const academicYearId = await resolveAcademicYearId(req.body.academicYearId);
+    const assignedClassIds = Array.isArray(req.body.assignedClassIds)
+      ? req.body.assignedClassIds
+      : req.body.assignedClassIds
+      ? [req.body.assignedClassIds]
+      : [];
+
+    if (assignedClassIds.length) {
+      const existingClasses = await AcademicClass.find({
+        _id: { $in: assignedClassIds },
+      }).select("_id");
+
+      if (existingClasses.length !== assignedClassIds.length) {
+        return ApiResponse.badRequest(
+          "Une ou plusieurs classes assignees sont introuvables"
+        ).send(res);
+      }
+    }
 
     const user = await facultyDetails.create({
       ...req.body,
       employeeId,
       profile,
+      departmentId: req.body.departmentId || branch.departmentId || null,
+      academicYearId,
+      assignedClassIds,
       password: "faculty123",
     });
 
-    const sanitizedUser = await facultyDetails
-      .findById(user._id)
-      .select("-__v -password");
+    const sanitizedUser = await applyFacultyPopulate(
+      facultyDetails.findById(user._id).select("-__v -password")
+    );
+
     return ApiResponse.created(
       sanitizedUser,
       "Enseignant cree avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Register Error: ", error);
+    console.error("Register Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -101,6 +161,11 @@ const updateFacultyController = async (req, res) => {
       return ApiResponse.badRequest(
         "L'identifiant de l'enseignant est requis"
       ).send(res);
+    }
+
+    const currentFaculty = await facultyDetails.findById(req.params.id);
+    if (!currentFaculty) {
+      return ApiResponse.notFound("Enseignant introuvable").send(res);
     }
 
     const updateData = { ...req.body };
@@ -145,32 +210,55 @@ const updateFacultyController = async (req, res) => {
     }
 
     if (password) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(password, salt);
+      updateData.password = await bcrypt.hash(password, 10);
     }
 
     if (req.file) {
       updateData.profile = req.file.filename;
     }
 
-    if (updateData.dob) updateData.dob = new Date(updateData.dob);
-    if (updateData.joiningDate)
-      updateData.joiningDate = new Date(updateData.joiningDate);
+    if (updateData.branchId) {
+      const branch = await Branch.findById(updateData.branchId);
+      if (!branch) {
+        return ApiResponse.notFound("Filiere introuvable").send(res);
+      }
 
-    const updatedUser = await facultyDetails
-      .findByIdAndUpdate(req.params.id, updateData, { new: true })
-      .select("-__v -password");
-
-    if (!updatedUser) {
-      return ApiResponse.notFound("Enseignant introuvable").send(res);
+      if (!updateData.departmentId) {
+        updateData.departmentId = branch.departmentId || null;
+      }
     }
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "academicYearId")) {
+      updateData.academicYearId = await resolveAcademicYearId(
+        updateData.academicYearId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "assignedClassIds")) {
+      updateData.assignedClassIds = Array.isArray(updateData.assignedClassIds)
+        ? updateData.assignedClassIds
+        : updateData.assignedClassIds
+        ? [updateData.assignedClassIds]
+        : [];
+    }
+
+    if (updateData.dob) updateData.dob = new Date(updateData.dob);
+    if (updateData.joiningDate) {
+      updateData.joiningDate = new Date(updateData.joiningDate);
+    }
+
+    const updatedUser = await applyFacultyPopulate(
+      facultyDetails
+        .findByIdAndUpdate(req.params.id, updateData, { new: true })
+        .select("-__v -password")
+    );
 
     return ApiResponse.success(
       updatedUser,
       "Enseignant mis a jour avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Update Error: ", error);
+    console.error("Update Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -192,17 +280,16 @@ const deleteFacultyController = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("Delete Error: ", error);
+    console.error("Delete Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
 
 const getMyFacultyDetailsController = async (req, res) => {
   try {
-    const user = await facultyDetails
-      .findById(req.userId)
-      .select("-__v -password")
-      .populate("branchId", "name branchId");
+    const user = await applyFacultyPopulate(
+      facultyDetails.findById(req.userId).select("-__v -password")
+    );
     if (!user) {
       return ApiResponse.notFound("Utilisateur introuvable").send(res);
     }
@@ -210,7 +297,7 @@ const getMyFacultyDetailsController = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("My Details Error: ", error);
+    console.error("My Details Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -246,7 +333,7 @@ const sendFacultyResetPasswordEmail = async (req, res) => {
       "E-mail de reinitialisation envoye avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Forgot Password Error: ", error);
+    console.error("Forgot Password Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -289,7 +376,7 @@ const updateFacultyPasswordHandler = async (req, res) => {
       res
     );
   } catch (error) {
-    console.error("Password Update Error: ", error);
+    console.error("Password Update Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };
@@ -326,8 +413,7 @@ const updateLoggedInPasswordController = async (req, res) => {
       ).send(res);
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await facultyDetails.findByIdAndUpdate(userId, {
       password: hashedPassword,
@@ -338,7 +424,7 @@ const updateLoggedInPasswordController = async (req, res) => {
       "Mot de passe mis a jour avec succes"
     ).send(res);
   } catch (error) {
-    console.error("Update Password Error: ", error);
+    console.error("Update Password Error:", error);
     return ApiResponse.internalServerError().send(res);
   }
 };

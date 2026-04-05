@@ -61,13 +61,13 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
 
   return (
     <section className="modal-backdrop">
-      <div className="modal-card max-w-lg p-8">
-        <div className="flex items-start justify-between gap-4">
+      <div className="modal-card max-w-lg">
+        <div className="modal-header">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
+            <p className="section-kicker">
               Securite du compte
             </p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-900">
+            <h2 className="section-title">
               Modifier le mot de passe
             </h2>
           </div>
@@ -80,9 +80,10 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
           </CustomButton>
         </div>
 
-        <form onSubmit={handlePasswordUpdate} className="mt-8 space-y-5">
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
+        <form onSubmit={handlePasswordUpdate}>
+          <div className="modal-body space-y-5">
+            <div className="field-group">
+              <label className="field-label">
               Mot de passe actuel
             </label>
             <input
@@ -91,9 +92,9 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
             />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
+            </div>
+            <div className="field-group">
+              <label className="field-label">
               Nouveau mot de passe
             </label>
             <input
@@ -102,9 +103,9 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
               onChange={(e) => setNewPassword(e.target.value)}
               required
             />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">
+            </div>
+            <div className="field-group">
+              <label className="field-label">
               Confirmer le nouveau mot de passe
             </label>
             <input
@@ -113,8 +114,9 @@ const UpdatePasswordLoggedIn = ({ onClose }) => {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
+            </div>
           </div>
-          <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-5">
+          <div className="modal-footer">
             <CustomButton type="button" variant="secondary" onClick={onClose}>
               Annuler
             </CustomButton>

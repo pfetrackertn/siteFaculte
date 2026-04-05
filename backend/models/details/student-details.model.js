@@ -35,9 +35,28 @@ const studentDetailsSchema = new mongoose.Schema(
       ref: "Branch",
       required: true,
     },
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      default: null,
+    },
     classId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AcademicClass",
+      default: null,
+    },
+    academicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicYear",
+      default: null,
+    },
+    promotionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Promotion",
+      default: null,
+    },
+    entryYear: {
+      type: Number,
       default: null,
     },
     gender: {
@@ -77,6 +96,20 @@ const studentDetailsSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archiveReason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     bloodGroup: {
       type: String,
       enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
@@ -96,9 +129,10 @@ const studentDetailsSchema = new mongoose.Schema(
 
 studentDetailsSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
-    next();
+    return next();
   }
   this.password = await bcrypt.hash(this.password, 10);
+  return next();
 });
 
 const studentDetails = mongoose.model("StudentDetail", studentDetailsSchema);

@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { FiArrowRight, FiLogIn } from "react-icons/fi";
+import {
+  FiArrowRight,
+  FiBookOpen,
+  FiBriefcase,
+  FiLogIn,
+  FiShield,
+} from "react-icons/fi";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 import { setUserToken } from "../redux/actions";
@@ -19,6 +25,12 @@ const USER_DESCRIPTIONS = {
   Student: "Consultez vos notes, ressources et annonces en quelques clics.",
   Faculty: "Gerez vos ressources, emplois du temps et evaluations depuis un seul espace.",
   Admin: "Pilotez les etudiants, enseignants, filieres, matieres et examens.",
+};
+
+const USER_ICONS = {
+  Student: FiBookOpen,
+  Faculty: FiBriefcase,
+  Admin: FiShield,
 };
 
 const LoginForm = ({ selected, onSubmit, formData, setFormData }) => (
@@ -165,57 +177,56 @@ const Login = () => {
       <div className="grid w-full overflow-hidden rounded-[36px] border border-white/70 bg-white/85 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.45)] backdrop-blur-xl lg:grid-cols-[1.05fr_0.95fr]">
         <section className="relative overflow-hidden bg-[linear-gradient(135deg,#0f4c81_0%,#1270bf_48%,#f5d94f_100%)] px-8 py-10 text-white sm:px-10 lg:px-12 lg:py-14">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(247,223,55,0.16),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(15,23,42,0.22),transparent_28%)]" />
-          <div className="relative">
+          <div className="relative flex h-full flex-col">
             <BrandMark
               theme="dark"
               subtitle="Plateforme numerique de gestion universitaire"
             />
-            <h1 className="mt-10 max-w-xl text-4xl font-extrabold tracking-tight sm:text-5xl">
-              L'identite academique d'ISC-KIN au coeur de votre application.
-            </h1>
-            <p className="mt-5 max-w-xl text-sm leading-7 text-slate-100 sm:text-base">
-              Connectez-vous selon votre role pour gerer les emplois du temps,
-              les examens, les ressources, les annonces et les profils depuis
-              un seul tableau de bord.
-            </p>
 
-            <div className="mt-10 flex max-w-xl items-center gap-5 rounded-[32px] border border-white/20 bg-white/10 p-5 backdrop-blur-sm">
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-[28px] bg-white/92 p-3 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.7)]">
-                <img
-                  src="/assets/isc-kin-logo.svg"
-                  alt="Logo ISC-KIN"
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-100">
-                  Identite visuelle
-                </p>
-                <p className="mt-2 text-lg font-bold text-white">
-                  Interface institutionnelle ISC-KIN
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-100/90">
-                  Le logo officiel et le nom de l'etablissement sont maintenant
-                  integres a l'experience de connexion et de navigation.
-                </p>
+            <div className="mt-8 max-w-xl rounded-[30px] border border-white/16 bg-white/10 px-5 py-5 backdrop-blur-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+                Repere rapide
+              </p>
+              <p className="mt-3 text-sm leading-7 text-slate-100/95 sm:text-[15px]">
+                Choisissez votre profil pour acceder rapidement a votre espace
+                et retrouver les services adaptes a votre activite.
+              </p>
+            </div>
+
+            <div className="mt-12">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                Acces par role
+              </p>
+              <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                {Object.values(USER_TYPES).map((userType) => {
+                  const Icon = USER_ICONS[userType];
+
+                  return (
+                    <button
+                      key={userType}
+                      type="button"
+                      onClick={() => handleUserTypeSelect(userType)}
+                      className={`rounded-3xl border p-5 text-left shadow-inner shadow-black/10 backdrop-blur-sm transition duration-200 ${
+                        selected === userType
+                          ? "border-white/40 bg-white/22"
+                          : "border-white/15 bg-white/12 hover:border-white/30 hover:bg-white/18"
+                      }`}
+                    >
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/18 text-white">
+                        <Icon className="text-lg" />
+                      </div>
+                      <p className="mt-4 text-sm font-bold text-white">
+                        {getUserTypeLabel(userType)}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-100/90">
+                        {USER_DESCRIPTIONS[userType]}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="mt-10 grid gap-4 sm:grid-cols-3">
-              {Object.values(USER_TYPES).map((userType) => (
-                <div
-                  key={userType}
-                  className="rounded-3xl border border-white/15 bg-white/12 p-5 shadow-inner shadow-black/10 backdrop-blur-sm"
-                >
-                  <p className="text-sm font-bold text-white">
-                    {getUserTypeLabel(userType)}
-                  </p>
-                  <p className="mt-2 text-xs leading-6 text-slate-200">
-                    {USER_DESCRIPTIONS[userType]}
-                  </p>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 

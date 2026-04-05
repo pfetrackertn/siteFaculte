@@ -21,9 +21,13 @@ const loginAdminController = async (req, res, next) => {
       return ApiResponse.unauthorized("Mot de passe invalide").send(res);
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { userId: user._id, role: "Admin" },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
 
     return ApiResponse.success({ token }, "Connexion reussie").send(res);
   } catch (error) {

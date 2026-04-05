@@ -1,167 +1,168 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import CustomButton from "../../components/CustomButton";
+import InfoItem from "../../components/InfoItem";
+import SectionCard from "../../components/SectionCard";
+import StatusBadge from "../../components/StatusBadge";
 import UpdatePasswordLoggedIn from "../../components/UpdatePasswordLoggedIn";
 import {
+  formatCurrencyCdf,
   formatLongDate,
+  getDefaultCountryLabel,
   getGenderLabel,
   getStatusLabel,
 } from "../../utils/displayText";
 
+const renderValue = (value) => value || "Non renseigne";
+
 const Profile = ({ profileData }) => {
   const [showPasswordUpdate, setShowPasswordUpdate] = useState(false);
 
-  if (!profileData) return null;
+  const fullName = useMemo(
+    () => [profileData?.firstName, profileData?.lastName].filter(Boolean).join(" "),
+    [profileData?.firstName, profileData?.lastName]
+  );
 
-  const emptyText = "Non renseigne";
+  if (!profileData) {
+    return null;
+  }
+
   const emergencyContact = profileData.emergencyContact || {};
   const salary =
     profileData.salary != null
-      ? `₹${Number(profileData.salary).toLocaleString("fr-FR")}`
-      : emptyText;
+      ? formatCurrencyCdf(profileData.salary)
+      : "Non renseigne";
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
-      <div className="flex items-center gap-8 mb-12 border-b pb-8 justify-between">
-        <div className="flex items-center gap-8">
-          <img
-            src={`${process.env.REACT_APP_MEDIA_LINK}/${profileData.profile}`}
-            alt="Profil"
-            className="w-40 h-40 rounded-full object-cover ring-4 ring-blue-500 ring-offset-4"
-          />
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              {`${profileData.firstName} ${profileData.lastName}`}
-            </h1>
-            <p className="text-lg text-gray-600 mb-1">
-              Identifiant employe : {profileData.employeeId}
-            </p>
-            <p className="text-lg text-blue-600 font-medium">
-              {profileData.designation || emptyText}
+    <div className="space-y-6 px-2 py-4 sm:px-4">
+      <SectionCard className="overflow-hidden px-6 py-7 sm:px-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+            <img
+              src={`${process.env.REACT_APP_MEDIA_LINK}/${profileData.profile}`}
+              alt={fullName || "Avatar enseignant"}
+              className="h-28 w-28 rounded-[28px] object-cover ring-4 ring-blue-100"
+            />
+            <div>
+              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
+                {renderValue(fullName)}
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                {renderValue(profileData.email)}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <StatusBadge tone="primary">
+                  {renderValue(profileData.designation)}
+                </StatusBadge>
+                <StatusBadge
+                  tone={profileData.status === "active" ? "success" : "warning"}
+                >
+                  {getStatusLabel(profileData.status)}
+                </StatusBadge>
+                <StatusBadge tone="neutral">
+                  {renderValue(profileData.departmentId?.name)}
+                </StatusBadge>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <CustomButton onClick={() => setShowPasswordUpdate(true)}>
+              Modifier le mot de passe
+            </CustomButton>
+            <p className="text-sm text-slate-500">
+              Identifiant employe :{" "}
+              <span className="font-semibold text-slate-800">
+                {renderValue(profileData.employeeId)}
+              </span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-8 justify-end">
-          <CustomButton
-            onClick={() => setShowPasswordUpdate(!showPasswordUpdate)}
-            variant="primary"
-          >
-            {showPasswordUpdate ? "Masquer" : "Modifier le mot de passe"}
-          </CustomButton>
-        </div>
-        {showPasswordUpdate && (
-          <UpdatePasswordLoggedIn
-            onClose={() => setShowPasswordUpdate(false)}
-          />
-        )}
+      </SectionCard>
+
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <SectionCard className="px-6 py-6 sm:px-8">
+          <div className="section-header">
+            <p className="section-kicker">Identite</p>
+            <h2 className="section-title">Informations personnelles</h2>
+          </div>
+          <div className="mt-5 info-grid">
+            <InfoItem label="E-mail" value={profileData.email} />
+            <InfoItem label="Telephone" value={profileData.phone} />
+            <InfoItem label="Genre" value={getGenderLabel(profileData.gender)} />
+            <InfoItem label="Groupe sanguin" value={profileData.bloodGroup} />
+            <InfoItem
+              label="Date de naissance"
+              value={formatLongDate(profileData.dob)}
+            />
+            <InfoItem
+              label="Date d'arrivee"
+              value={formatLongDate(profileData.joiningDate)}
+            />
+          </div>
+        </SectionCard>
+
+        <SectionCard className="px-6 py-6 sm:px-8">
+          <div className="section-header">
+            <p className="section-kicker">Affectation</p>
+            <h2 className="section-title">Informations academiques</h2>
+          </div>
+          <div className="mt-5 info-grid-2">
+            <InfoItem label="Departement" value={profileData.departmentId?.name} />
+            <InfoItem
+              label="Annee academique"
+              value={profileData.academicYearId?.name}
+            />
+            <InfoItem label="Filiere" value={profileData.branchId?.name} />
+            <InfoItem
+              label="Classes assignees"
+              value={
+                profileData.assignedClassIds?.length
+                  ? profileData.assignedClassIds
+                      .map((item) => item.name || item.code)
+                      .join(", ")
+                  : "Non renseigne"
+              }
+            />
+            <InfoItem label="Salaire" value={salary} />
+            <InfoItem label="Statut" value={getStatusLabel(profileData.status)} />
+          </div>
+        </SectionCard>
       </div>
 
-      <div className="grid grid-cols-1 gap-12">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
-            Informations personnelles
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">E-mail</label>
-              <p className="text-gray-900">{profileData.email || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Telephone</label>
-              <p className="text-gray-900">{profileData.phone || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Genre</label>
-              <p className="text-gray-900">
-                {getGenderLabel(profileData.gender) || emptyText}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Groupe sanguin
-              </label>
-              <p className="text-gray-900">
-                {profileData.bloodGroup || emptyText}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Date de naissance
-              </label>
-              <p className="text-gray-900">{formatLongDate(profileData.dob)}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Date d'arrivee
-              </label>
-              <p className="text-gray-900">
-                {formatLongDate(profileData.joiningDate)}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Salaire</label>
-              <p className="text-gray-900">{salary}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Statut</label>
-              <p className="text-gray-900">
-                {getStatusLabel(profileData.status) || emptyText}
-              </p>
-            </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SectionCard className="px-6 py-6 sm:px-8">
+          <div className="section-header">
+            <p className="section-kicker">Coordonnees</p>
+            <h2 className="section-title">Adresse</h2>
           </div>
-        </div>
+          <div className="mt-5 info-grid-2">
+            <InfoItem label="Adresse" value={profileData.address} />
+            <InfoItem label="Ville" value={profileData.city} />
+            <InfoItem label="Region" value={profileData.state} />
+            <InfoItem label="Code postal" value={profileData.pincode} />
+            <InfoItem
+              label="Pays"
+              value={profileData.country || getDefaultCountryLabel()}
+            />
+          </div>
+        </SectionCard>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
-            Adresse
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Adresse</label>
-              <p className="text-gray-900">{profileData.address || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Ville</label>
-              <p className="text-gray-900">{profileData.city || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Region</label>
-              <p className="text-gray-900">{profileData.state || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">
-                Code postal
-              </label>
-              <p className="text-gray-900">{profileData.pincode || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Pays</label>
-              <p className="text-gray-900">{profileData.country || emptyText}</p>
-            </div>
+        <SectionCard className="px-6 py-6 sm:px-8">
+          <div className="section-header">
+            <p className="section-kicker">Support</p>
+            <h2 className="section-title">Contact d'urgence</h2>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
-            Contact d'urgence
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Nom</label>
-              <p className="text-gray-900">{emergencyContact.name || emptyText}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Lien</label>
-              <p className="text-gray-900">
-                {emergencyContact.relationship || emptyText}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">Telephone</label>
-              <p className="text-gray-900">{emergencyContact.phone || emptyText}</p>
-            </div>
+          <div className="mt-5 info-grid-2">
+            <InfoItem label="Nom" value={emergencyContact.name} />
+            <InfoItem label="Lien" value={emergencyContact.relationship} />
+            <InfoItem label="Telephone" value={emergencyContact.phone} />
           </div>
-        </div>
+        </SectionCard>
       </div>
+
+      {showPasswordUpdate ? (
+        <UpdatePasswordLoggedIn onClose={() => setShowPasswordUpdate(false)} />
+      ) : null}
     </div>
   );
 };

@@ -1,9 +1,12 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
-import axiosWrapper from "../../utils/AxiosWrapper";
-import Heading from "../../components/Heading";
 import CustomButton from "../../components/CustomButton";
-import { getExamTypeLabel } from "../../utils/displayText";
+import Heading from "../../components/Heading";
+import Loading from "../../components/Loading";
+import SectionCard from "../../components/SectionCard";
+import axiosWrapper from "../../utils/AxiosWrapper";
+import { formatSemesterLabel, getExamTypeLabel } from "../../utils/displayText";
+import { getSemesterOptions } from "../../utils/semesterOptions";
 
 const AddMarks = () => {
   const [branches, setBranches] = useState([]);
@@ -19,19 +22,37 @@ const AddMarks = () => {
   const [marksData, setMarksData] = useState({});
   const [consent, setConsent] = useState(false);
   const [showSearch, setShowSearch] = useState(true);
+  const semesterOptions = useMemo(
+    () => getSemesterOptions({ currentValue: selectedSemester }),
+    [selectedSemester]
+  );
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
+
     if (name === "branch") {
-      const branch = branches.find((b) => b._id === value);
+      const branch = branches.find((item) => item._id === value) || null;
       setSelectedBranch(branch);
-    } else if (name === "subject") {
-      const subject = subjects.find((s) => s._id === value);
+      setSelectedSubject(null);
+      setSelectedExam(null);
+      return;
+    }
+
+    if (name === "subject") {
+      const subject = subjects.find((item) => item._id === value) || null;
       setSelectedSubject(subject);
-    } else if (name === "semester") {
+      setSelectedExam(null);
+      return;
+    }
+
+    if (name === "semester") {
       setSelectedSemester(value);
-    } else if (name === "exam") {
-      const exam = exams.find((e) => e._id === value);
+      setSelectedExam(null);
+      return;
+    }
+
+    if (name === "exam") {
+      const exam = exams.find((item) => item._id === value) || null;
       setSelectedExam(exam);
     }
   };
@@ -44,6 +65,7 @@ const AddMarks = () => {
           Authorization: `Bearer ${userToken}`,
         },
       });
+
       if (response.data.success) {
         setBranches(response.data.data);
       } else {
@@ -53,7 +75,10 @@ const AddMarks = () => {
       if (error.response?.status === 404) {
         setBranches([]);
       } else {
-        toast.error(error.response?.data?.message || "Impossible de charger les filieres");
+        toast.error(
+          error.response?.data?.message ||
+            "Impossible de charger les filieres"
+        );
       }
     } finally {
       toast.dismiss();
@@ -61,16 +86,22 @@ const AddMarks = () => {
   }, [userToken]);
 
   const fetchSubjects = useCallback(async () => {
+    if (!selectedBranch?._id) {
+      setSubjects([]);
+      return;
+    }
+
     try {
       toast.loading("Chargement des matieres...");
       const response = await axiosWrapper.get(
-        `/subject?branch=${selectedBranch?._id}`,
+        `/subject?branch=${selectedBranch._id}`,
         {
           headers: {
             Authorization: `Bearer ${userToken}`,
           },
         }
       );
+
       if (response.data.success) {
         setSubjects(response.data.data);
       } else {
@@ -80,7 +111,10 @@ const AddMarks = () => {
       if (error.response?.status === 404) {
         setSubjects([]);
       } else {
-        toast.error(error.response?.data?.message || "Impossible de charger les matieres");
+        toast.error(
+          error.response?.data?.message ||
+            "Impossible de charger les matieres"
+        );
       }
     } finally {
       toast.dismiss();
@@ -88,6 +122,11 @@ const AddMarks = () => {
   }, [selectedBranch?._id, userToken]);
 
   const fetchExams = useCallback(async () => {
+    if (!selectedSemester) {
+      setExams([]);
+      return;
+    }
+
     try {
       toast.loading("Chargement des examens...");
       const response = await axiosWrapper.get(
@@ -98,6 +137,7 @@ const AddMarks = () => {
           },
         }
       );
+
       if (response.data.success) {
         setExams(response.data.data);
       } else {
@@ -107,7 +147,10 @@ const AddMarks = () => {
       if (error.response?.status === 404) {
         setExams([]);
       } else {
-        toast.error(error.response?.data?.message || "Impossible de charger les examens");
+        toast.error(
+          error.response?.data?.message ||
+            "Impossible de charger les examens"
+        );
       }
     } finally {
       toast.dismiss();
@@ -117,6 +160,7 @@ const AddMarks = () => {
   const searchStudents = async () => {
     setDataLoading(true);
     toast.loading("Recherche des etudiants...");
+
     try {
       const response = await axiosWrapper.get(
         `/marks/students?branch=${selectedBranch?._id}&subject=${selectedSubject?._id}&semester=${selectedSemester}&examId=${selectedExam?._id}`,
@@ -131,7 +175,6 @@ const AddMarks = () => {
           toast.error("Aucun etudiant trouve !");
           setMasterMarksData([]);
         } else {
-          toast.success("Etudiants trouves !");
           const initialMarksData = {};
           response.data.data.forEach((student) => {
             initialMarksData[student._id] = student.obtainedMarks || "";
@@ -139,14 +182,17 @@ const AddMarks = () => {
           setMarksData(initialMarksData);
           setMasterMarksData(response.data.data);
           setShowSearch(false);
+          toast.success("Etudiants trouves !");
         }
       } else {
         toast.error(response.data.message);
       }
     } catch (error) {
       toast.dismiss();
-      toast.error(error.response?.data?.message || "Erreur lors de la recherche des etudiants");
-      console.error("Search error:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Erreur lors de la recherche des etudiants"
+      );
     } finally {
       setDataLoading(false);
     }
@@ -192,12 +238,14 @@ const AddMarks = () => {
         setMarksData({});
         setConsent(false);
         setShowSearch(true);
+        setMasterMarksData([]);
       } else {
         toast.error(response.data.message);
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Erreur lors de l'envoi des notes");
-      console.error("Submit error:", error);
+      toast.error(
+        error.response?.data?.message || "Erreur lors de l'envoi des notes"
+      );
     } finally {
       setDataLoading(false);
       toast.dismiss();
@@ -209,10 +257,6 @@ const AddMarks = () => {
     setMasterMarksData([]);
     setMarksData({});
     setConsent(false);
-  };
-
-  const handleSearch = async () => {
-    await searchStudents();
   };
 
   useEffect(() => {
@@ -231,41 +275,137 @@ const AddMarks = () => {
     }
   }, [fetchExams, selectedSemester]);
 
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: "Filiere",
+        value: selectedBranch?.name || "Non selectionnee",
+      },
+      {
+        label: "Semestre",
+        value: selectedSemester
+          ? formatSemesterLabel(selectedSemester)
+          : "Non selectionne",
+      },
+      {
+        label: "Examen",
+        value: selectedExam?.name || "Non selectionne",
+      },
+      {
+        label: "Type d'examen",
+        value: selectedExam
+          ? getExamTypeLabel(selectedExam.examType)
+          : "Non selectionne",
+      },
+      {
+        label: "Matiere",
+        value: selectedSubject?.name || "Non selectionnee",
+      },
+      {
+        label: "Note totale",
+        value: selectedExam?.totalMarks || "Non definie",
+      },
+      {
+        label: "Date",
+        value: selectedExam?.date
+          ? new Date(selectedExam.date).toLocaleDateString("fr-FR")
+          : "Non selectionnee",
+      },
+      {
+        label: "Etudiants",
+        value: masterMarksData.length || 0,
+      },
+    ],
+    [masterMarksData.length, selectedBranch?.name, selectedExam, selectedSemester, selectedSubject?.name]
+  );
+
+  const searchStats = useMemo(
+    () => [
+      {
+        label: "Filiere",
+        value: selectedBranch?.name || "A selectionner",
+      },
+      {
+        label: "Semestre",
+        value: selectedSemester
+          ? formatSemesterLabel(selectedSemester)
+          : "A selectionner",
+      },
+      {
+        label: "Matiere",
+        value: selectedSubject?.name || "A selectionner",
+      },
+      {
+        label: "Examens",
+        value: exams.length,
+      },
+    ],
+    [exams.length, selectedBranch?.name, selectedSemester, selectedSubject?.name]
+  );
+
   return (
-    <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
-      <div className="flex justify-between items-center w-full">
-        <Heading title="Saisie des notes" />
+    <div className="screen-shell">
+      <div className="action-bar">
+        <Heading
+          title="Saisie des notes"
+          subtitle="Selectionnez le contexte academique puis enregistrez les notes d'un groupe d'etudiants."
+        />
       </div>
 
-      {showSearch && (
-        <div className="w-full bg-white rounded-lg p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-[90%] mx-auto">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
+      <div className="metric-grid">
+        {searchStats.map((item, index) => (
+          <div
+            key={item.label}
+            className={`metric-card ${
+              index === 0
+                ? "metric-card-primary"
+                : index === 1
+                ? "metric-card-success"
+                : index === 2
+                ? "metric-card-warning"
+                : "metric-card-neutral"
+            }`}
+          >
+            <p className="metric-label">{item.label}</p>
+            <p className="metric-value text-xl sm:text-2xl">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {showSearch ? (
+        <div className="filter-card">
+          <div className="section-header">
+            <p className="section-kicker">Recherche</p>
+            <h2 className="section-title">Selection du contexte</h2>
+            <p className="section-subtitle">
+              Filtrez par semestre, filiere, matiere et examen avant de lancer
+              la saisie.
+            </p>
+          </div>
+
+          <div className="mt-6 filter-grid">
+            <div className="field-group">
+              <label className="field-label">Semestre</label>
               <select
                 name="semester"
                 value={selectedSemester || ""}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Choisir un semestre</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                {semesterOptions.map((sem) => (
                   <option key={sem} value={sem}>
-                    Semestre {sem}
+                    {formatSemesterLabel(sem)}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Filiere
-              </label>
+            <div className="field-group">
+              <label className="field-label">Filiere</label>
               <select
                 name="branch"
                 value={selectedBranch?._id || ""}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Choisir une filiere</option>
                 {branches?.map((branch) => (
@@ -276,18 +416,13 @@ const AddMarks = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Matiere
-              </label>
+            <div className="field-group">
+              <label className="field-label">Matiere</label>
               <select
                 name="subject"
                 value={selectedSubject?._id || ""}
                 onChange={handleInputChange}
                 disabled={!selectedBranch}
-                className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  !selectedBranch ? "bg-gray-100 cursor-not-allowed" : ""
-                }`}
               >
                 <option value="">Choisir une matiere</option>
                 {subjects?.map((subject) => (
@@ -296,25 +431,20 @@ const AddMarks = () => {
                   </option>
                 ))}
               </select>
-              {!selectedBranch && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Veuillez d'abord choisir une filiere
+              {!selectedBranch ? (
+                <p className="field-hint">
+                  Veuillez d'abord choisir une filiere.
                 </p>
-              )}
+              ) : null}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Examen
-              </label>
+            <div className="field-group">
+              <label className="field-label">Examen</label>
               <select
                 name="exam"
                 value={selectedExam?._id || ""}
                 onChange={handleInputChange}
                 disabled={!selectedSubject}
-                className={`w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  !selectedSubject ? "bg-gray-100 cursor-not-allowed" : ""
-                }`}
               >
                 <option value="">Choisir un examen</option>
                 {exams?.map((exam) => (
@@ -323,17 +453,17 @@ const AddMarks = () => {
                   </option>
                 ))}
               </select>
-              {!selectedSubject && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Veuillez d'abord choisir une matiere
+              {!selectedSubject ? (
+                <p className="field-hint">
+                  Veuillez d'abord choisir une matiere.
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
 
-          <div className="mt-6 flex justify-center w-[10%] mx-auto">
+          <div className="mt-6 flex justify-end">
             <CustomButton
-              type="submit"
+              className="module-action-button"
               disabled={
                 dataLoading ||
                 !selectedBranch ||
@@ -341,145 +471,104 @@ const AddMarks = () => {
                 !selectedExam ||
                 !selectedSemester
               }
-              variant="primary"
-              onClick={handleSearch}
+              onClick={searchStudents}
             >
-              {dataLoading ? "Recherche..." : "Rechercher"}
+              {dataLoading ? "Recherche..." : "Rechercher les etudiants"}
             </CustomButton>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Marks Entry Section */}
-      {!showSearch && masterMarksData && masterMarksData.length > 0 && (
-        <div className="w-full bg-white rounded-lg p-6">
-          <div className="space-y-4 w-full mb-6">
-            <div className="flex flex-col gap-4 w-[90%] mx-auto">
-              <div className="grid grid-cols-4 gap-4">
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">
-                    Filiere et semestre :
-                  </span>
-                  <p className="text-gray-800">
-                    {selectedBranch?.branchId} - Semestre {selectedSemester}
-                  </p>
-                </div>
+      {!showSearch && dataLoading ? (
+        <Loading label="Chargement des etudiants..." />
+      ) : null}
 
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Examen :</span>
-                  <p className="text-gray-800">
-                    {selectedExam?.name || "Non selectionne"}
-                  </p>
-                </div>
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Type d'examen :</span>
-                  <p className="text-gray-800">
-                    {selectedExam
-                      ? getExamTypeLabel(selectedExam.examType)
-                      : "Non selectionne"}
-                  </p>
-                </div>
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Matiere :</span>
-                  <p className="text-gray-800">
-                    {selectedSubject?.name || "Non selectionnee"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Note totale :</span>
-                  <p className="text-gray-800">
-                    {selectedExam?.totalMarks || "Non selectionnee"}
-                  </p>
-                </div>
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Date :</span>
-                  <p className="text-gray-800">
-                    {selectedExam?.date
-                      ? new Date(selectedExam.date).toLocaleDateString()
-                      : "Non selectionnee"}
-                  </p>
-                </div>
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Heure :</span>
-                  <p className="text-gray-800">
-                    {selectedExam?.time || "Non selectionnee"}
-                  </p>
-                </div>
-                <div className="border p-3 rounded-md shadow">
-                  <span className="text-sm text-gray-500">Etudiants :</span>
-                  <p className="text-gray-800">
-                    {masterMarksData.length || "Non selectionnes"}
-                  </p>
-                </div>
-              </div>
+      {!showSearch && masterMarksData.length > 0 ? (
+        <SectionCard className="px-6 py-6 sm:px-7">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="section-header">
+              <p className="section-kicker">Saisie</p>
+              <h2 className="section-title">Enregistrement des notes</h2>
+              <p className="section-subtitle">
+                Renseignez chaque note puis confirmez l'ensemble avant l'envoi.
+              </p>
             </div>
-          </div>
-
-          <div className="flex justify-end items-center mb-4">
-            <CustomButton
-              variant="secondary"
-              onClick={handleBack}
-              className="text-sm"
-            >
+            <CustomButton variant="secondary" onClick={handleBack}>
               Retour a la recherche
             </CustomButton>
           </div>
 
-          <div className="grid grid-cols-4 gap-4 w-[100%] mx-auto">
-            {masterMarksData.map((student) => (
-              <div
-                key={student._id}
-                className="flex items-center justify-between w-full border rounded-md"
-              >
-                <p className="font-medium text-gray-700 flex items-center justify-center px-3 h-full py-2 rounded-md min-w-[120px] text-center">
-                  {student.enrollmentNo}
-                </p>
-                <input
-                  type="number"
-                  min={0}
-                  max={selectedExam?.totalMarks || 100}
-                  className="px-4 py-2 border rounded-md focus:outline-none bg-gray-50 border-gray-200 focus:ring-2 focus:ring-blue-500 w-full m-2"
-                  value={marksData[student._id] || ""}
-                  placeholder="Saisir la note"
-                  onChange={(e) =>
-                    setMarksData({
-                      ...marksData,
-                      [student._id]: e.target.value,
-                    })
-                  }
-                />
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {summaryCards.map((item) => (
+              <div key={item.label} className="content-card-muted">
+                <p className="detail-label">{item.label}</p>
+                <p className="detail-value">{item.value}</p>
               </div>
             ))}
           </div>
 
-          <div className="flex flex-col items-center gap-4 bottom-0 left-0 right-0 bg-white p-4 border-t mt-10">
-            <div className="flex items-center gap-2">
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {masterMarksData.map((student) => (
+              <div key={student._id} className="content-card-muted">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {student.enrollmentNo}
+                    </p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
+                      Etudiant
+                    </p>
+                  </div>
+                  <span className="badge badge-neutral">
+                    / {selectedExam?.totalMarks || 0}
+                  </span>
+                </div>
+                <div className="mt-4 field-group">
+                  <label className="field-label">Note obtenue</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={selectedExam?.totalMarks || 100}
+                    value={marksData[student._id] || ""}
+                    placeholder="Saisir la note"
+                    onChange={(event) =>
+                      setMarksData({
+                        ...marksData,
+                        [student._id]: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 border-t border-slate-200/80 pt-6">
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-600">
               <input
                 type="checkbox"
                 id="consent"
                 checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                onChange={(event) => setConsent(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
               />
-              <label htmlFor="consent" className="text-sm text-gray-700">
-                Je confirme que toutes les notes saisies sont correctes et verifiees
-              </label>
-            </div>
+              <span>
+                Je confirme que toutes les notes saisies sont correctes et
+                verifiees.
+              </span>
+            </label>
 
-            <CustomButton
-              type="submit"
-              disabled={dataLoading || !consent}
-              variant="primary"
-              onClick={handleSubmit}
-            >
-              {dataLoading ? "Envoi..." : "Valider les notes"}
-            </CustomButton>
+            <div className="mt-5 flex justify-end">
+              <CustomButton
+                disabled={dataLoading || !consent}
+                onClick={handleSubmit}
+              >
+                {dataLoading ? "Envoi..." : "Valider les notes"}
+              </CustomButton>
+            </div>
           </div>
-        </div>
-      )}
+        </SectionCard>
+      ) : null}
     </div>
   );
 };

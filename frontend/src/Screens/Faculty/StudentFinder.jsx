@@ -1,15 +1,24 @@
 import React, { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import Heading from "../../components/Heading";
-import axiosWrapper from "../../utils/AxiosWrapper";
 import CustomButton from "../../components/CustomButton";
+import Heading from "../../components/Heading";
+import InfoItem from "../../components/InfoItem";
 import NoData from "../../components/NoData";
+import SectionCard from "../../components/SectionCard";
+import StatusBadge from "../../components/StatusBadge";
+import axiosWrapper from "../../utils/AxiosWrapper";
 import {
+  formatAverage,
   formatLongDate,
   formatSemesterLabel,
   getAcademicClassLabel,
+  getDefaultCountryLabel,
   getGenderLabel,
 } from "../../utils/displayText";
+import { getSemesterOptions } from "../../utils/semesterOptions";
+
+const FALLBACK_IMAGE =
+  "https://images.unsplash.com/photo-1744315900478-fa44dc6a4e89?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
 
 const StudentFinder = () => {
   const [searchParams, setSearchParams] = useState({
@@ -24,6 +33,7 @@ const StudentFinder = () => {
   const [classes, setClasses] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudentSummary, setSelectedStudentSummary] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const userToken = localStorage.getItem("userToken");
   const [hasSearched, setHasSearched] = useState(false);
@@ -31,7 +41,6 @@ const StudentFinder = () => {
   useEffect(() => {
     const fetchBranches = async () => {
       try {
-        toast.loading("Chargement des filieres...");
         const response = await axiosWrapper.get("/branch", {
           headers: {
             Authorization: `Bearer ${userToken}`,
@@ -47,13 +56,13 @@ const StudentFinder = () => {
           setBranches([]);
         } else {
           toast.error(
-            error.response?.data?.message || "Impossible de charger les filieres"
+            error.response?.data?.message ||
+              "Impossible de charger les filieres"
           );
         }
-      } finally {
-        toast.dismiss();
       }
     };
+
     fetchBranches();
   }, [userToken]);
 
@@ -76,7 +85,8 @@ const StudentFinder = () => {
         }
 
         toast.error(
-          error.response?.data?.message || "Impossible de charger les classes"
+          error.response?.data?.message ||
+            "Impossible de charger les classes"
         );
       }
     };
@@ -84,25 +94,42 @@ const StudentFinder = () => {
     fetchClasses();
   }, [userToken]);
 
-  const filteredClasses = useMemo(() => {
-    return classes.filter((academicClass) => {
-      if (searchParams.branch && academicClass.branchId?._id !== searchParams.branch) {
-        return false;
-      }
+  const filteredClasses = useMemo(
+    () =>
+      classes.filter((academicClass) => {
+        if (searchParams.branch && academicClass.branchId?._id !== searchParams.branch) {
+          return false;
+        }
 
-      if (
-        searchParams.semester &&
-        Number(academicClass.semester) !== Number(searchParams.semester)
-      ) {
-        return false;
-      }
+        if (
+          searchParams.semester &&
+          Number(academicClass.semester) !== Number(searchParams.semester)
+        ) {
+          return false;
+        }
 
-      return true;
-    });
-  }, [classes, searchParams.branch, searchParams.semester]);
+        return true;
+      }),
+    [classes, searchParams.branch, searchParams.semester]
+  );
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  const selectedSearchClass = useMemo(
+    () => classes.find((academicClass) => academicClass._id === searchParams.classId),
+    [classes, searchParams.classId]
+  );
+
+  const semesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        classItem: selectedSearchClass,
+        classes: filteredClasses,
+        currentValue: searchParams.semester,
+      }),
+    [filteredClasses, searchParams.semester, selectedSearchClass]
+  );
+
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
     setSearchParams((prev) => ({
       ...prev,
       [name]: value,
@@ -110,8 +137,8 @@ const StudentFinder = () => {
     }));
   };
 
-  const searchStudents = async (e) => {
-    e.preventDefault();
+  const searchStudents = async (event) => {
+    event.preventDefault();
 
     if (
       !searchParams.enrollmentNo &&
@@ -129,13 +156,9 @@ const StudentFinder = () => {
     toast.loading("Recherche des etudiants...");
     setStudents([]);
     try {
-      const response = await axiosWrapper.post(
-        `/student/search`,
-        searchParams,
-        {
-          headers: { Authorization: `Bearer ${userToken}` },
-        }
-      );
+      const response = await axiosWrapper.post("/student/search", searchParams, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
 
       toast.dismiss();
       if (response.data.success) {
@@ -157,7 +180,6 @@ const StudentFinder = () => {
             "Erreur lors de la recherche des etudiants"
         );
       }
-      console.error("Erreur de recherche :", error);
     } finally {
       setDataLoading(false);
     }
@@ -168,54 +190,117 @@ const StudentFinder = () => {
     setShowModal(true);
   };
 
+  useEffect(() => {
+    const fetchStudentSummary = async () => {
+      if (!showModal || !selectedStudent?._id) {
+        return;
+      }
+
+      try {
+        const response = await axiosWrapper.get(
+          `/marks/summary/${selectedStudent._id}`,
+          {
+            headers: { Authorization: `Bearer ${userToken}` },
+          }
+        );
+
+        if (response.data.success) {
+          setSelectedStudentSummary(response.data.data);
+        }
+      } catch (error) {
+        setSelectedStudentSummary(null);
+      }
+    };
+
+    fetchStudentSummary();
+  }, [selectedStudent?._id, showModal, userToken]);
+
+  const selectedStudentName = [
+    selectedStudent?.firstName,
+    selectedStudent?.middleName,
+    selectedStudent?.lastName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const stats = useMemo(
+    () => [
+      { label: "Resultats", value: students.length },
+      { label: "Filieres", value: branches.length },
+      { label: "Classes", value: filteredClasses.length },
+    ],
+    [branches.length, filteredClasses.length, students.length]
+  );
+
   return (
-    <div className="w-full mx-auto mt-10 flex justify-center items-start flex-col mb-10">
-      <div className="flex justify-between items-center w-full">
+    <div className="screen-shell">
+      <div className="action-bar">
         <Heading
           title="Recherche d'etudiants"
           subtitle="Retrouvez rapidement un etudiant par filiere, semestre ou classe."
         />
       </div>
 
-      <div className="my-6 mx-auto w-full">
-        <form onSubmit={searchStudents} className="flex items-center">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 w-[90%] mx-auto">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Numero d'inscription
-              </label>
+      <div className="metric-grid">
+        {stats.map((stat, index) => (
+          <div
+            key={stat.label}
+            className={`metric-card ${
+              index === 0
+                ? "metric-card-primary"
+                : index === 1
+                ? "metric-card-success"
+                : "metric-card-warning"
+            }`}
+          >
+            <p className="metric-label">{stat.label}</p>
+            <p className="metric-value">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="filter-card">
+        <div className="section-header">
+          <p className="section-kicker">Recherche avancee</p>
+          <h2 className="section-title">Choisir les filtres</h2>
+          <p className="section-subtitle">
+            Combinez plusieurs criteres pour cibler precisement les etudiants.
+          </p>
+        </div>
+
+        <form onSubmit={searchStudents} className="mt-6 space-y-6">
+          <div className="filter-grid-5">
+            <div className="field-group">
+              <label className="field-label">Numero d'inscription</label>
               <input
                 type="text"
                 name="enrollmentNo"
                 value={searchParams.enrollmentNo}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Saisir le numero d'inscription"
+                placeholder="Saisir le numero"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+            <div className="field-group">
+              <label className="field-label">Nom</label>
               <input
                 type="text"
                 name="name"
                 value={searchParams.name}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Saisir le nom de l'etudiant"
+                placeholder="Saisir le nom"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
+            <div className="field-group">
+              <label className="field-label">Semestre</label>
               <select
                 name="semester"
                 value={searchParams.semester}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Choisir un semestre</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                {semesterOptions.map((sem) => (
                   <option key={sem} value={sem}>
                     {formatSemesterLabel(sem)}
                   </option>
@@ -223,301 +308,328 @@ const StudentFinder = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Filiere
-              </label>
+            <div className="field-group">
+              <label className="field-label">Filiere</label>
               <select
                 name="branch"
                 value={searchParams.branch}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Choisir une filiere</option>
-                  {branches?.map((branch) => (
-                    <option key={branch._id} value={branch._id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Classe
-                </label>
-                <select
-                  name="classId"
-                  value={searchParams.classId}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Choisir une classe</option>
-                  {filteredClasses.map((academicClass) => (
-                    <option key={academicClass._id} value={academicClass._id}>
-                      {getAcademicClassLabel(academicClass)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                {branches?.map((branch) => (
+                  <option key={branch._id} value={branch._id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-          <div className="mt-6 flex justify-center w-[10%] mx-auto">
+            <div className="field-group">
+              <label className="field-label">Classe</label>
+              <select
+                name="classId"
+                value={searchParams.classId}
+                onChange={handleInputChange}
+              >
+                <option value="">Choisir une classe</option>
+                {filteredClasses.map((academicClass) => (
+                  <option key={academicClass._id} value={academicClass._id}>
+                    {getAcademicClassLabel(academicClass)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
             <CustomButton
               type="submit"
               disabled={dataLoading}
-              variant="primary"
+              className="module-action-button"
             >
               {dataLoading ? "Recherche..." : "Rechercher"}
             </CustomButton>
           </div>
         </form>
-
-        {!hasSearched && (
-          <div className="text-center mt-8 text-gray-600 flex flex-col items-center justify-center my-10 bg-white p-10 rounded-lg mx-auto w-[40%]">
-            <img
-              src="/assets/filter.svg"
-              alt="Choisir des filtres"
-              className="w-64 h-64 mb-4"
-            />
-            Veuillez choisir au moins un filtre pour rechercher des etudiants
-          </div>
-        )}
-
-        {hasSearched && students.length === 0 && (
-          <NoData title="Aucun etudiant trouve" />
-        )}
-
-        {students.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold mb-4">Resultats de recherche</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-6 py-3 border-b text-left">Profil</th>
-                    <th className="px-6 py-3 border-b text-left">Nom</th>
-                    <th className="px-6 py-3 border-b text-left">
-                      No inscription
-                    </th>
-                    <th className="px-6 py-3 border-b text-left">Semestre</th>
-                    <th className="px-6 py-3 border-b text-left">Filiere</th>
-                    <th className="px-6 py-3 border-b text-left">Classe</th>
-                    <th className="px-6 py-3 border-b text-left">E-mail</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((student) => (
-                    <tr
-                      key={student._id}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => handleRowClick(student)}
-                    >
-                      <td className="px-6 py-4 border-b">
-                        <img
-                          src={`${process.env.REACT_APP_MEDIA_LINK}/${student.profile}`}
-                          alt={
-                            [student.firstName, student.middleName, student.lastName]
-                              .filter(Boolean)
-                              .join(" ") || "Etudiant"
-                          }
-                          className="w-12 h-12 object-cover rounded-full"
-                          onError={(e) => {
-                            e.target.src =
-                              "https://images.unsplash.com/photo-1744315900478-fa44dc6a4e89?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-                          }}
-                        />
-                      </td>
-                      <td className="px-6 py-4 border-b">
-                        {student.firstName} {student.middleName}{" "}
-                        {student.lastName}
-                      </td>
-                      <td className="px-6 py-4 border-b">
-                        {student.enrollmentNo}
-                      </td>
-                      <td className="px-6 py-4 border-b">
-                        {formatSemesterLabel(student.semester)}
-                      </td>
-                      <td className="px-6 py-4 border-b">
-                        {student.branchId?.name}
-                      </td>
-                      <td className="px-6 py-4 border-b">
-                        {getAcademicClassLabel(student.classId)}
-                      </td>
-                      <td className="px-6 py-4 border-b">{student.email}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {showModal && selectedStudent && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-start mb-6">
-                <h2 className="text-2xl font-bold">Details de l'etudiant</h2>
-                <CustomButton
-                  onClick={() => setShowModal(false)}
-                  variant="secondary"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </CustomButton>
-              </div>
-
-              <div className="flex flex-col md:flex-row gap-8 mb-8">
-                <div className="w-full md:w-1/3">
-                  <img
-                    src={`${process.env.REACT_APP_MEDIA_LINK}/${selectedStudent.profile}`}
-                    alt={
-                      [
-                        selectedStudent.firstName,
-                        selectedStudent.middleName,
-                        selectedStudent.lastName,
-                      ]
-                        .filter(Boolean)
-                        .join(" ") || "Etudiant"
-                    }
-                    className="w-full h-auto object-cover rounded-lg"
-                    onError={(e) => {
-                      e.target.src =
-                        "https://images.unsplash.com/photo-1744315900478-fa44dc6a4e89?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-                    }}
-                  />
-                </div>
-
-                <div className="w-full md:w-2/3">
-                  <h3 className="text-xl font-semibold mb-4">
-                    Informations personnelles
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <p>
-                      <span className="font-medium">Nom complet :</span>{" "}
-                      {selectedStudent.firstName} {selectedStudent.middleName}{" "}
-                      {selectedStudent.lastName}
-                    </p>
-                    <p>
-                      <span className="font-medium">Genre :</span>{" "}
-                      {getGenderLabel(selectedStudent.gender)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Date de naissance :</span>{" "}
-                      {formatLongDate(selectedStudent.dob)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Groupe sanguin :</span>{" "}
-                      {selectedStudent.bloodGroup}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Informations academiques
-                  </h3>
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-medium">No inscription :</span>{" "}
-                      {selectedStudent.enrollmentNo}
-                    </p>
-                    <p>
-                      <span className="font-medium">Filiere :</span>{" "}
-                      {selectedStudent.branchId?.name}
-                    </p>
-                    <p>
-                      <span className="font-medium">Semestre :</span>{" "}
-                      {formatSemesterLabel(selectedStudent.semester)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Classe :</span>{" "}
-                      {getAcademicClassLabel(selectedStudent.classId)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Coordonnees
-                  </h3>
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-medium">E-mail :</span>{" "}
-                      {selectedStudent.email}
-                    </p>
-                    <p>
-                      <span className="font-medium">Telephone :</span>{" "}
-                      {selectedStudent.phone}
-                    </p>
-                    <p>
-                      <span className="font-medium">Adresse :</span>{" "}
-                      {selectedStudent.address}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Localisation
-                  </h3>
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-medium">Ville :</span>{" "}
-                      {selectedStudent.city}
-                    </p>
-                    <p>
-                      <span className="font-medium">Region :</span>{" "}
-                      {selectedStudent.state}
-                    </p>
-                    <p>
-                      <span className="font-medium">Code postal :</span>{" "}
-                      {selectedStudent.pincode}
-                    </p>
-                    <p>
-                      <span className="font-medium">Pays :</span>{" "}
-                      {selectedStudent.country}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Contact d'urgence
-                  </h3>
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-medium">Nom :</span>{" "}
-                      {selectedStudent.emergencyContact?.name}
-                    </p>
-                    <p>
-                      <span className="font-medium">Lien :</span>{" "}
-                      {selectedStudent.emergencyContact?.relationship}
-                    </p>
-                    <p>
-                      <span className="font-medium">Telephone :</span>{" "}
-                      {selectedStudent.emergencyContact?.phone}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+
+      {!hasSearched ? (
+        <div className="empty-state-panel">
+          <img
+            src="/assets/filter.svg"
+            alt="Choisir des filtres"
+            className="mx-auto h-52 w-52 object-contain"
+          />
+          <p className="mt-4 text-lg font-semibold text-slate-700">
+            Choisissez au moins un filtre
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            La recherche s'active des que vous renseignez un ou plusieurs
+            criteres.
+          </p>
+        </div>
+      ) : null}
+
+      {hasSearched && students.length === 0 ? (
+        <NoData title="Aucun etudiant trouve" />
+      ) : null}
+
+      {students.length > 0 ? (
+        <div className="table-shell">
+          <div className="table-toolbar">
+            <div className="section-header">
+              <p className="section-kicker">Resultats</p>
+              <h2 className="section-title">Etudiants trouves</h2>
+              <p className="section-subtitle">
+                Cliquez sur une ligne pour consulter le profil detaille.
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th>Profil</th>
+                  <th>Nom</th>
+                  <th>No inscription</th>
+                  <th>Semestre</th>
+                  <th>Filiere</th>
+                  <th>Classe</th>
+                  <th>E-mail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((student) => (
+                  <tr
+                    key={student._id}
+                    className="cursor-pointer"
+                    onClick={() => handleRowClick(student)}
+                  >
+                    <td>
+                      <img
+                        src={`${process.env.REACT_APP_MEDIA_LINK}/${student.profile}`}
+                        alt={
+                          [
+                            student.firstName,
+                            student.middleName,
+                            student.lastName,
+                          ]
+                            .filter(Boolean)
+                            .join(" ") || "Etudiant"
+                        }
+                        className="table-avatar"
+                        onError={(event) => {
+                          event.target.src = FALLBACK_IMAGE;
+                        }}
+                      />
+                    </td>
+                    <td className="font-semibold text-slate-900">
+                      {student.firstName} {student.middleName} {student.lastName}
+                    </td>
+                    <td>{student.enrollmentNo}</td>
+                    <td>{formatSemesterLabel(student.semester)}</td>
+                    <td>{student.branchId?.name}</td>
+                    <td>{getAcademicClassLabel(student.classId)}</td>
+                    <td>{student.email}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {showModal && selectedStudent ? (
+        <div className="modal-backdrop">
+          <div className="modal-card max-w-5xl">
+            <div className="modal-header">
+              <div>
+                <h2 className="section-title">{selectedStudentName || "Details"}</h2>
+                <p className="section-subtitle">
+                  Consultez les informations personnelles, academiques et la
+                  synthese de moyenne de l'etudiant.
+                </p>
+              </div>
+              <CustomButton
+                onClick={() => setShowModal(false)}
+                variant="secondary"
+                className="!rounded-xl !p-2.5"
+              >
+                <svg
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </CustomButton>
+            </div>
+
+            <div className="modal-body space-y-6">
+              <SectionCard className="overflow-hidden px-6 py-6 sm:px-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
+                    <img
+                      src={`${process.env.REACT_APP_MEDIA_LINK}/${selectedStudent.profile}`}
+                      alt={selectedStudentName || "Etudiant"}
+                      className="h-28 w-28 rounded-[28px] object-cover ring-4 ring-blue-100"
+                      onError={(event) => {
+                        event.target.src = FALLBACK_IMAGE;
+                      }}
+                    />
+                    <div>
+                      <p className="section-kicker">Fiche etudiant</p>
+                      <h3 className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900">
+                        {selectedStudentName}
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-500">
+                        {selectedStudent.email}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <StatusBadge tone="primary">
+                          {formatSemesterLabel(selectedStudent.semester)}
+                        </StatusBadge>
+                        <StatusBadge tone="neutral">
+                          {getAcademicClassLabel(selectedStudent.classId)}
+                        </StatusBadge>
+                        <StatusBadge tone="success">
+                          {selectedStudent.branchId?.name || "Sans filiere"}
+                        </StatusBadge>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="metric-card metric-card-primary">
+                      <p className="metric-label text-blue-700">Moyenne generale</p>
+                      <p className="metric-value">
+                        {formatAverage(selectedStudentSummary?.overallAverage)}
+                      </p>
+                    </div>
+                    <div className="metric-card metric-card-success">
+                      <p className="metric-label text-emerald-700">
+                        Moyenne semestre
+                      </p>
+                      <p className="metric-value">
+                        {formatAverage(
+                          selectedStudentSummary?.semesterAverages?.[0]?.average
+                        )}
+                      </p>
+                    </div>
+                    <div className="metric-card metric-card-warning">
+                      <p className="metric-label text-amber-700">
+                        Matieres
+                      </p>
+                      <p className="metric-value">
+                        {selectedStudentSummary?.subjectCount || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <SectionCard className="px-6 py-6 sm:px-8">
+                  <div className="section-header">
+                    <p className="section-kicker">Identite</p>
+                    <h3 className="section-title">Informations personnelles</h3>
+                  </div>
+                  <div className="mt-5 info-grid-2">
+                    <InfoItem label="Nom complet" value={selectedStudentName} />
+                    <InfoItem
+                      label="Genre"
+                      value={getGenderLabel(selectedStudent.gender)}
+                    />
+                    <InfoItem
+                      label="Date de naissance"
+                      value={formatLongDate(selectedStudent.dob)}
+                    />
+                    <InfoItem
+                      label="Groupe sanguin"
+                      value={selectedStudent.bloodGroup}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard className="px-6 py-6 sm:px-8">
+                  <div className="section-header">
+                    <p className="section-kicker">Academique</p>
+                    <h3 className="section-title">Affectation</h3>
+                  </div>
+                  <div className="mt-5 info-grid-2">
+                    <InfoItem
+                      label="No inscription"
+                      value={selectedStudent.enrollmentNo}
+                    />
+                    <InfoItem
+                      label="Filiere"
+                      value={selectedStudent.branchId?.name}
+                    />
+                    <InfoItem
+                      label="Semestre"
+                      value={formatSemesterLabel(selectedStudent.semester)}
+                    />
+                    <InfoItem
+                      label="Classe"
+                      value={getAcademicClassLabel(selectedStudent.classId)}
+                    />
+                    <InfoItem
+                      label="Annee academique"
+                      value={selectedStudent.academicYearId?.name}
+                    />
+                    <InfoItem
+                      label="Promotion"
+                      value={selectedStudent.promotionId?.name}
+                    />
+                  </div>
+                </SectionCard>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <SectionCard className="px-6 py-6 sm:px-8">
+                  <div className="section-header">
+                    <p className="section-kicker">Coordonnees</p>
+                    <h3 className="section-title">Contact</h3>
+                  </div>
+                  <div className="mt-5 info-grid-2">
+                    <InfoItem label="E-mail" value={selectedStudent.email} />
+                    <InfoItem label="Telephone" value={selectedStudent.phone} />
+                    <InfoItem
+                      label="Departement"
+                      value={selectedStudent.departmentId?.name}
+                    />
+                    <InfoItem label="Adresse" value={selectedStudent.address} />
+                  </div>
+                </SectionCard>
+
+                <SectionCard className="px-6 py-6 sm:px-8">
+                  <div className="section-header">
+                    <p className="section-kicker">Localisation</p>
+                    <h3 className="section-title">Residence</h3>
+                  </div>
+                  <div className="mt-5 info-grid-2">
+                    <InfoItem label="Ville" value={selectedStudent.city} />
+                    <InfoItem label="Region" value={selectedStudent.state} />
+                    <InfoItem
+                      label="Code postal"
+                      value={selectedStudent.pincode}
+                    />
+                    <InfoItem
+                      label="Pays"
+                      value={selectedStudent.country || getDefaultCountryLabel()}
+                    />
+                  </div>
+                </SectionCard>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -34,10 +34,24 @@ const Material = new mongoose.Schema(
       ref: "AcademicClass",
       default: null,
     },
+    academicYearId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AcademicYear",
+      default: null,
+    },
     type: {
       type: String,
       enum: ["notes", "assignment", "syllabus", "other"],
       required: true,
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }

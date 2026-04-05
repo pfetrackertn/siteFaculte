@@ -1,90 +1,123 @@
 const Notice = require("../models/notice.model");
 const ApiResponse = require("../utils/ApiResponse");
+const { getArchiveFilter, buildArchiveUpdate } = require("../utils/archive");
+const { resolveAcademicYearId } = require("../utils/academic-year");
+
+const populateNotice = (query) =>
+  query.populate("academicYearId", "name isActive");
 
 const getNoticeController = async (req, res) => {
   try {
-    const notices = await Notice.find().sort({ createdAt: -1 });
-    if (!notices || notices.length === 0) {
-      return ApiResponse.error("Aucune annonce trouvee", 404).send(res);
+    const query = {
+      ...getArchiveFilter(req.query),
+    };
+
+    if (req.query.type) {
+      query.type = req.query.type;
     }
+
+    if (req.query.status) {
+      query.status = req.query.status;
+    }
+
+    if (req.query.academicYearId) {
+      query.academicYearId = req.query.academicYearId;
+    }
+
+    const notices = await populateNotice(Notice.find(query).sort({ createdAt: -1 }));
+
+    if (!notices.length) {
+      return ApiResponse.notFound("Aucune annonce trouvee").send(res);
+    }
+
     return ApiResponse.success(notices, "Annonces chargees avec succes").send(
       res
     );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Get Notice Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
 const addNoticeController = async (req, res) => {
-  const { title, description, type, link } = req.body;
-
-  if (!title || !description || !type) {
-    return ApiResponse.error("Tous les champs sont obligatoires", 400).send(
-      res
-    );
-  }
-
   try {
+    const { title, description, type, link = "", status = "active" } = req.body;
+
+    if (!title || !description || !type) {
+      return ApiResponse.badRequest("Tous les champs sont obligatoires").send(
+        res
+      );
+    }
+
+    const academicYearId = await resolveAcademicYearId(req.body.academicYearId);
+
     const notice = await Notice.create({
-      title,
+      title: title.trim(),
       type,
-      description,
-      link,
+      description: description.trim(),
+      link: link.trim(),
+      status,
+      academicYearId,
     });
 
     return ApiResponse.created(notice, "Annonce ajoutee avec succes").send(res);
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Add Notice Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
 const updateNoticeController = async (req, res) => {
-  const { title, description, type, link } = req.body;
-  const updateFields = {};
-
-  if (title) updateFields.title = title;
-  if (description) updateFields.description = description;
-  if (type) updateFields.type = type;
-  if (link) updateFields.link = link;
-
-  if (Object.keys(updateFields).length === 0) {
-    return ApiResponse.error(
-      "Aucun champ n'a ete fourni pour la mise a jour",
-      400
-    ).send(res);
-  }
-
   try {
-    let notice = await Notice.findByIdAndUpdate(req.params.id, updateFields, {
-      new: true,
+    const updateFields = { ...req.body };
+
+    ["title", "description", "link"].forEach((field) => {
+      if (updateFields[field] !== undefined) {
+        updateFields[field] = updateFields[field].trim();
+      }
     });
 
+    if (Object.prototype.hasOwnProperty.call(updateFields, "academicYearId")) {
+      updateFields.academicYearId = await resolveAcademicYearId(
+        updateFields.academicYearId
+      );
+    }
+
+    const notice = await populateNotice(
+      Notice.findByIdAndUpdate(req.params.id, updateFields, { new: true })
+    );
+
     if (!notice) {
-      return ApiResponse.error("Annonce introuvable", 404).send(res);
+      return ApiResponse.notFound("Annonce introuvable").send(res);
     }
 
     return ApiResponse.success(notice, "Annonce mise a jour avec succes").send(
       res
     );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Update Notice Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 
 const deleteNoticeController = async (req, res) => {
   try {
-    if (!req.params.id) {
-      return ApiResponse.error("L'identifiant de l'annonce est requis", 400)
-        .send(res);
+    const notice = await Notice.findByIdAndUpdate(
+      req.params.id,
+      buildArchiveUpdate(true, "Suppression logique depuis le module annonce"),
+      { new: true }
+    );
+
+    if (!notice) {
+      return ApiResponse.notFound("Annonce introuvable").send(res);
     }
 
-    let notice = await Notice.findByIdAndDelete(req.params.id);
-    if (!notice) {
-      return ApiResponse.error("Annonce introuvable", 404).send(res);
-    }
-    return ApiResponse.success(null, "Annonce supprimee avec succes").send(res);
+    return ApiResponse.success(notice, "Annonce archivee avec succes").send(
+      res
+    );
   } catch (error) {
-    return ApiResponse.error(error.message).send(res);
+    console.error("Delete Notice Error:", error);
+    return ApiResponse.internalServerError().send(res);
   }
 };
 

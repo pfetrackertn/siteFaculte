@@ -7,16 +7,25 @@ import CustomButton from "../../components/CustomButton";
 import DeleteConfirm from "../../components/DeleteConfirm";
 import Loading from "../../components/Loading";
 import NoData from "../../components/NoData";
+import FormSection from "../../components/FormSection";
 import axiosWrapper from "../../utils/AxiosWrapper";
+import useAcademicOptions from "../../hooks/useAcademicOptions";
 import {
   formatSemesterLabel,
+  getLmdLevelLabel,
+  getProgramTypeLabel,
   getStatusLabel,
 } from "../../utils/displayText";
+import { getSemesterOptions } from "../../utils/semesterOptions";
 
 const INITIAL_FORM_DATA = {
   name: "",
   code: "",
   branchId: "",
+  departmentId: "",
+  academicYearId: "",
+  level: "L1",
+  programType: "licence",
   semester: "",
   capacity: "",
   description: "",
@@ -24,42 +33,29 @@ const INITIAL_FORM_DATA = {
 };
 
 const Classes = () => {
+  const token = localStorage.getItem("userToken");
+  const { academicYears, departments, branches, refreshOptions } =
+    useAcademicOptions();
   const [classes, setClasses] = useState([]);
-  const [branches, setBranches] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
-  const userToken = localStorage.getItem("userToken");
-
-  const fetchBranches = useCallback(async () => {
-    try {
-      const response = await axiosWrapper.get("/branch", {
-        headers: { Authorization: `Bearer ${userToken}` },
-      });
-
-      if (response.data.success) {
-        setBranches(response.data.data);
-      }
-    } catch (error) {
-      if (error.response?.status === 404) {
-        setBranches([]);
-        return;
-      }
-
-      toast.error(
-        error.response?.data?.message || "Impossible de charger les filieres"
-      );
-    }
-  }, [userToken]);
+  const [filters, setFilters] = useState({
+    search: "",
+    academicYearId: "",
+    departmentId: "",
+    branchId: "",
+    status: "",
+  });
 
   const fetchClasses = useCallback(async () => {
     try {
       setDataLoading(true);
       const response = await axiosWrapper.get("/class", {
-        headers: { Authorization: `Bearer ${userToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.data.success) {
@@ -77,34 +73,93 @@ const Classes = () => {
     } finally {
       setDataLoading(false);
     }
-  }, [userToken]);
+  }, [token]);
 
   useEffect(() => {
-    fetchBranches();
     fetchClasses();
-  }, [fetchBranches, fetchClasses]);
+  }, [fetchClasses]);
+
+  const filteredBranches = useMemo(() => {
+    if (!formData.departmentId) {
+      return branches;
+    }
+
+    return branches.filter(
+      (branch) => branch.departmentId?._id === formData.departmentId
+    );
+  }, [branches, formData.departmentId]);
 
   const stats = useMemo(() => {
-    const activeClasses = classes.filter(
-      (academicClass) => academicClass.status === "active"
-    ).length;
-
     return [
-      {
-        label: "Classes",
-        value: classes.length,
-      },
+      { label: "Classes", value: classes.length },
       {
         label: "Actives",
-        value: activeClasses,
+        value: classes.filter((academicClass) => academicClass.status === "active")
+          .length,
       },
       {
-        label: "Filieres couvertes",
-        value: new Set(classes.map((academicClass) => academicClass.branchId?._id))
-          .size,
+        label: "LMD couverts",
+        value: new Set(classes.map((academicClass) => academicClass.level)).size,
       },
     ];
   }, [classes]);
+
+  const filteredListBranches = useMemo(() => {
+    if (!filters.departmentId) {
+      return branches;
+    }
+
+    return branches.filter(
+      (branch) => branch.departmentId?._id === filters.departmentId
+    );
+  }, [branches, filters.departmentId]);
+
+  const visibleClasses = useMemo(() => {
+    return classes.filter((academicClass) => {
+      const matchesSearch = filters.search
+        ? [
+            academicClass.name,
+            academicClass.code,
+            academicClass.description,
+            academicClass.level,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(filters.search.toLowerCase())
+        : true;
+      const matchesYear = filters.academicYearId
+        ? academicClass.academicYearId?._id === filters.academicYearId
+        : true;
+      const matchesDepartment = filters.departmentId
+        ? academicClass.departmentId?._id === filters.departmentId
+        : true;
+      const matchesBranch = filters.branchId
+        ? academicClass.branchId?._id === filters.branchId
+        : true;
+      const matchesStatus = filters.status
+        ? academicClass.status === filters.status
+        : true;
+
+      return (
+        matchesSearch &&
+        matchesYear &&
+        matchesDepartment &&
+        matchesBranch &&
+        matchesStatus
+      );
+    });
+  }, [classes, filters]);
+
+  const classSemesterOptions = useMemo(
+    () =>
+      getSemesterOptions({
+        programType: formData.programType,
+        level: formData.level,
+        currentValue: formData.semester,
+      }),
+    [formData.level, formData.programType, formData.semester]
+  );
 
   const resetForm = () => {
     setFormData(INITIAL_FORM_DATA);
@@ -113,81 +168,46 @@ const Classes = () => {
     setSelectedClassId(null);
   };
 
-  const openCreateModal = () => {
-    setFormData(INITIAL_FORM_DATA);
-    setShowModal(true);
-    setIsEditing(false);
-    setSelectedClassId(null);
-  };
-
-  const handleEdit = (academicClass) => {
-    setFormData({
-      name: academicClass.name || "",
-      code: academicClass.code || "",
-      branchId: academicClass.branchId?._id || "",
-      semester: academicClass.semester || "",
-      capacity: academicClass.capacity || "",
-      description: academicClass.description || "",
-      status: academicClass.status || "active",
-    });
-    setSelectedClassId(academicClass._id);
-    setIsEditing(true);
-    setShowModal(true);
-  };
-
-  const handleChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (!formData.name || !formData.code || !formData.branchId || !formData.semester) {
-      toast.error("Veuillez renseigner le nom, le code, la filiere et le semestre");
+      toast.error("Le nom, le code, la filiere et le semestre sont requis");
       return;
     }
 
     try {
-      setDataLoading(true);
       toast.loading(
         isEditing ? "Mise a jour de la classe..." : "Ajout de la classe..."
       );
 
-      const requestConfig = {
-        headers: { Authorization: `Bearer ${userToken}` },
-      };
-
       const response = isEditing
-        ? await axiosWrapper.patch(`/class/${selectedClassId}`, formData, requestConfig)
-        : await axiosWrapper.post("/class", formData, requestConfig);
+        ? await axiosWrapper.patch(`/class/${selectedClassId}`, formData, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        : await axiosWrapper.post("/class", formData, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
       toast.dismiss();
 
       if (response.data.success) {
         toast.success(response.data.message);
         resetForm();
+        refreshOptions();
         fetchClasses();
-      } else {
-        toast.error(response.data.message);
       }
     } catch (error) {
       toast.dismiss();
-      toast.error(error.response?.data?.message || "Operation echouee");
-    } finally {
-      setDataLoading(false);
+      toast.error(error.response?.data?.message || "Operation impossible");
     }
   };
 
   const confirmDelete = async () => {
     try {
-      setDataLoading(true);
-      toast.loading("Suppression de la classe...");
-
+      toast.loading("Archivage de la classe...");
       const response = await axiosWrapper.delete(`/class/${selectedClassId}`, {
-        headers: { Authorization: `Bearer ${userToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       toast.dismiss();
@@ -196,130 +216,225 @@ const Classes = () => {
         toast.success(response.data.message);
         setIsDeleteConfirmOpen(false);
         fetchClasses();
-      } else {
-        toast.error(response.data.message);
       }
     } catch (error) {
       toast.dismiss();
-      toast.error(error.response?.data?.message || "Suppression impossible");
-    } finally {
-      setDataLoading(false);
+      toast.error(error.response?.data?.message || "Archivage impossible");
     }
   };
 
   return (
-    <div className="w-full px-2 py-6 sm:px-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="screen-shell">
+      <div className="action-bar">
         <Heading
           title="Gestion des classes"
-          subtitle="Structurez les promotions, groupes ou cohortes par filiere et semestre."
+          subtitle="Structurez les niveaux LMD, le semestre, le departement et l'annee academique de chaque classe."
         />
-        {branches.length > 0 && (
-          <CustomButton onClick={openCreateModal}>
-            <IoMdAdd className="text-xl" />
-            Nouvelle classe
-          </CustomButton>
-        )}
+        <CustomButton
+          onClick={() => setShowModal(true)}
+          className="module-action-button"
+        >
+          <IoMdAdd className="text-xl" />
+          Nouvelle classe
+        </CustomButton>
       </div>
 
-      {branches.length === 0 && !dataLoading ? (
-        <div className="mt-8">
-          <NoData
-            title="Aucune filiere disponible"
-            description="Ajoutez d'abord une filiere avant de creer des classes."
-          />
-        </div>
-      ) : null}
+      <div className="metric-grid">
+        {stats.map((stat) => (
+          <div key={stat.label} className="panel-section px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {stat.label}
+            </p>
+            <p className="mt-3 text-3xl font-extrabold text-slate-900">
+              {stat.value}
+            </p>
+          </div>
+        ))}
+      </div>
 
-      {branches.length > 0 && (
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="panel-section px-5 py-5"
+      <div className="filter-card">
+        <div className="section-header">
+          <p className="section-kicker">Filtres</p>
+          <h2 className="section-title">Affiner les classes</h2>
+        </div>
+        <div className="mt-5 filter-grid-5">
+          <div className="field-group">
+            <label className="field-label">Recherche</label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  search: event.target.value,
+                }))
+              }
+              placeholder="Nom, code ou niveau"
+            />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Annee academique</label>
+            <select
+              value={filters.academicYearId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  academicYearId: event.target.value,
+                }))
+              }
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {stat.label}
-              </p>
-              <p className="mt-3 text-3xl font-extrabold text-slate-900">
-                {stat.value}
-              </p>
-            </div>
-          ))}
+              <option value="">Toutes</option>
+              {academicYears.map((academicYear) => (
+                <option key={academicYear._id} value={academicYear._id}>
+                  {academicYear.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Departement</label>
+            <select
+              value={filters.departmentId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  departmentId: event.target.value,
+                  branchId: "",
+                }))
+              }
+            >
+              <option value="">Tous</option>
+              {departments.map((department) => (
+                <option key={department._id} value={department._id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Filiere</label>
+            <select
+              value={filters.branchId}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  branchId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Toutes</option>
+              {filteredListBranches.map((branch) => (
+                <option key={branch._id} value={branch._id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Statut</label>
+            <select
+              value={filters.status}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  status: event.target.value,
+                }))
+              }
+            >
+              <option value="">Tous</option>
+              <option value="active">Actif</option>
+              <option value="inactive">Inactif</option>
+            </select>
+          </div>
         </div>
-      )}
+      </div>
 
-      {dataLoading && !showModal ? (
+      {dataLoading ? (
         <div className="mt-8">
           <Loading label="Chargement des classes..." />
         </div>
-      ) : null}
-
-      {!dataLoading && branches.length > 0 && classes.length === 0 ? (
+      ) : classes.length === 0 ? (
         <div className="mt-8">
           <NoData
-            title="Aucune classe enregistree"
-            description="Creez votre premiere classe pour structurer les groupes d'etudiants."
+            title="Aucune classe"
+            description="Ajoutez vos classes LMD pour rattacher etudiants, promotions, frais et ressources."
           />
         </div>
-      ) : null}
-
-      {!dataLoading && classes.length > 0 ? (
-        <div className="table-shell mt-8 overflow-x-auto">
-          <table>
-            <thead>
+      ) : visibleClasses.length === 0 ? (
+        <div className="mt-8">
+          <NoData
+            title="Aucun resultat"
+            description="Aucune classe ne correspond aux filtres selectionnes."
+          />
+        </div>
+      ) : (
+        <div className="table-shell">
+          <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900 text-white">
               <tr>
-                <th>Classe</th>
-                <th>Filiere</th>
-                <th>Semestre</th>
-                <th>Capacite</th>
-                <th>Statut</th>
-                <th>Creee le</th>
-                <th className="text-center">Actions</th>
+                <th className="px-5 py-4 text-left">Classe</th>
+                <th className="px-5 py-4 text-left">Structure</th>
+                <th className="px-5 py-4 text-left">Capacite</th>
+                <th className="px-5 py-4 text-left">Statut</th>
+                <th className="px-5 py-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {classes.map((academicClass) => (
-                <tr key={academicClass._id}>
-                  <td>
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {academicClass.name}
-                      </p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-                        {academicClass.code}
-                      </p>
-                    </div>
+              {visibleClasses.map((academicClass) => (
+                <tr key={academicClass._id} className="border-t border-slate-100">
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {academicClass.name}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {academicClass.code} | {getLmdLevelLabel(academicClass.level)}
+                    </p>
                   </td>
-                  <td>{academicClass.branchId?.name || "Non renseignee"}</td>
-                  <td>{formatSemesterLabel(academicClass.semester)}</td>
-                  <td>{academicClass.capacity || "-"}</td>
-                  <td>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                      {getStatusLabel(academicClass.status)}
-                    </span>
+                  <td className="px-5 py-4 text-slate-600">
+                    <p>{academicClass.departmentId?.name || "Sans departement"}</p>
+                    <p>{academicClass.branchId?.name || "Sans filiere"}</p>
+                    <p>{academicClass.academicYearId?.name || "Annee active"}</p>
+                    <p>{formatSemesterLabel(academicClass.semester)}</p>
+                    <p>{getProgramTypeLabel(academicClass.programType)}</p>
                   </td>
-                  <td>
-                    {new Date(academicClass.createdAt).toLocaleDateString("fr-FR")}
+                  <td className="px-5 py-4">{academicClass.capacity || 0}</td>
+                  <td className="px-5 py-4">
+                    {getStatusLabel(academicClass.status)}
                   </td>
-                  <td>
+                  <td className="px-5 py-4">
                     <div className="flex justify-center gap-2">
                       <CustomButton
                         variant="secondary"
-                        className="!rounded-xl !p-2.5"
-                        onClick={() => handleEdit(academicClass)}
-                        title="Modifier la classe"
+                        className="!p-2"
+                        onClick={() => {
+                          setFormData({
+                            name: academicClass.name || "",
+                            code: academicClass.code || "",
+                            branchId: academicClass.branchId?._id || "",
+                            departmentId: academicClass.departmentId?._id || "",
+                            academicYearId: academicClass.academicYearId?._id || "",
+                            level: academicClass.level || "L1",
+                            programType: academicClass.programType || "licence",
+                            semester: academicClass.semester || "",
+                            capacity: academicClass.capacity || "",
+                            description: academicClass.description || "",
+                            status: academicClass.status || "active",
+                          });
+                          setSelectedClassId(academicClass._id);
+                          setIsEditing(true);
+                          setShowModal(true);
+                        }}
                       >
                         <MdEdit />
                       </CustomButton>
                       <CustomButton
                         variant="danger"
-                        className="!rounded-xl !p-2.5"
+                        className="!p-2"
                         onClick={() => {
                           setSelectedClassId(academicClass._id);
                           setIsDeleteConfirmOpen(true);
                         }}
-                        title="Supprimer la classe"
                       >
                         <MdOutlineDelete />
                       </CustomButton>
@@ -329,146 +444,254 @@ const Classes = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
-      ) : null}
+      )}
 
-      {showModal && (
+      {showModal ? (
         <div className="modal-backdrop">
-          <div className="modal-card max-w-3xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-6 py-5 sm:px-8">
+          <div className="modal-card max-w-3xl">
+            <div className="modal-header">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  {isEditing ? "Modifier la classe" : "Ajouter une classe"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Definissez le groupe, la filiere, le semestre et la capacite d'accueil.
-                </p>
+              <h2 className="section-title">
+                {isEditing ? "Modifier la classe" : "Ajouter une classe"}
+              </h2>
+              <p className="section-subtitle">
+                Definissez le niveau LMD, la structure et la capacite dans un formulaire stable.
+              </p>
               </div>
               <button
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
                 onClick={resetForm}
-                className="rounded-2xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               >
-                <IoMdClose className="text-3xl" />
+                <IoMdClose className="text-2xl" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5 px-6 py-6 sm:px-8">
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Nom de la classe
-                  </label>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body space-y-6">
+                <FormSection
+                  title="Structure de la classe"
+                  subtitle="Identifiez le niveau, la filiere et le cycle academique."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="field-group">
+                      <label className="field-label">Nom</label>
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={(event) => handleChange("name", event.target.value)}
-                    placeholder="Ex. Licence 2 - Groupe A"
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
                   />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Code
-                  </label>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Code</label>
                   <input
                     type="text"
                     value={formData.code}
-                    onChange={(event) => handleChange("code", event.target.value)}
-                    placeholder="L2-A"
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        code: event.target.value,
+                      }))
+                    }
                   />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Filiere
-                  </label>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Departement</label>
+                  <select
+                    value={formData.departmentId}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        departmentId: event.target.value,
+                        branchId: "",
+                      }))
+                    }
+                  >
+                    <option value="">Aucun</option>
+                    {departments.map((department) => (
+                      <option key={department._id} value={department._id}>
+                        {department.name}
+                      </option>
+                    ))}
+                  </select>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Filiere</label>
                   <select
                     value={formData.branchId}
-                    onChange={(event) => handleChange("branchId", event.target.value)}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        branchId: event.target.value,
+                      }))
+                    }
                   >
-                    <option value="">Choisir une filiere</option>
-                    {branches.map((branch) => (
+                    <option value="">Selectionner</option>
+                    {filteredBranches.map((branch) => (
                       <option key={branch._id} value={branch._id}>
                         {branch.name}
                       </option>
                     ))}
                   </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Semestre
-                  </label>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Annee academique</label>
                   <select
-                    value={formData.semester}
-                    onChange={(event) => handleChange("semester", event.target.value)}
+                    value={formData.academicYearId}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        academicYearId: event.target.value,
+                      }))
+                    }
                   >
-                    <option value="">Choisir un semestre</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((semester) => (
-                      <option key={semester} value={semester}>
-                        {formatSemesterLabel(semester)}
+                    <option value="">Annee active</option>
+                    {academicYears.map((academicYear) => (
+                      <option key={academicYear._id} value={academicYear._id}>
+                        {academicYear.name}
                       </option>
                     ))}
                   </select>
-                </div>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Niveau LMD</label>
+                  <select
+                    value={formData.level}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        level: event.target.value,
+                        programType: event.target.value.startsWith("M")
+                          ? "master"
+                          : event.target.value.startsWith("D")
+                          ? "doctorat"
+                          : "licence",
+                      }))
+                    }
+                  >
+                    <option value="L1">Licence 1</option>
+                    <option value="L2">Licence 2</option>
+                    <option value="L3">Licence 3</option>
+                    <option value="M1">Master 1</option>
+                    <option value="M2">Master 2</option>
+                    <option value="D1">Doctorat 1</option>
+                    <option value="D2">Doctorat 2</option>
+                    <option value="D3">Doctorat 3</option>
+                  </select>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Type de programme</label>
+                  <select
+                    value={formData.programType}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        programType: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="licence">Licence</option>
+                    <option value="master">Master</option>
+                    <option value="doctorat">Doctorat</option>
+                  </select>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Semestre</label>
+                      <select
+                        value={formData.semester}
+                        onChange={(event) =>
+                          setFormData((current) => ({
+                            ...current,
+                            semester: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Choisir un semestre</option>
+                        {classSemesterOptions.map((semester) => (
+                          <option key={semester} value={semester}>
+                            {formatSemesterLabel(semester)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </FormSection>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Capacite
-                  </label>
+                <FormSection
+                  title="Capacite et description"
+                  subtitle="Precisez la capacite d'accueil et les informations complementaires."
+                >
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div className="field-group">
+                      <label className="field-label">Capacite</label>
                   <input
                     type="number"
-                    min="0"
                     value={formData.capacity}
-                    onChange={(event) => handleChange("capacity", event.target.value)}
-                    placeholder="40"
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        capacity: event.target.value,
+                      }))
+                    }
                   />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Statut
-                  </label>
+                    </div>
+                    <div className="field-group">
+                      <label className="field-label">Statut</label>
                   <select
                     value={formData.status}
-                    onChange={(event) => handleChange("status", event.target.value)}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        status: event.target.value,
+                      }))
+                    }
                   >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
+                    <option value="active">Actif</option>
+                    <option value="inactive">Inactif</option>
                   </select>
-                </div>
+                    </div>
+                    <div className="field-group md:col-span-2">
+                      <label className="field-label">Description</label>
+                      <textarea
+                        rows={4}
+                        value={formData.description}
+                        onChange={(event) =>
+                          setFormData((current) => ({
+                            ...current,
+                            description: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </FormSection>
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Description
-                </label>
-                <textarea
-                  rows="4"
-                  value={formData.description}
-                  onChange={(event) => handleChange("description", event.target.value)}
-                  placeholder="Informations utiles sur cette classe, sa specialite ou son organisation."
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-slate-200/80 pt-5">
+              <div className="modal-footer">
                 <CustomButton variant="secondary" onClick={resetForm}>
                   Annuler
                 </CustomButton>
                 <CustomButton type="submit">
-                  {isEditing ? "Enregistrer" : "Creer la classe"}
+                  {isEditing ? "Mettre a jour" : "Creer"}
                 </CustomButton>
               </div>
             </form>
           </div>
         </div>
-      )}
+      ) : null}
 
       <DeleteConfirm
         isOpen={isDeleteConfirmOpen}
         onClose={() => setIsDeleteConfirmOpen(false)}
         onConfirm={confirmDelete}
-        message="Voulez-vous vraiment supprimer cette classe ?"
+        title="Archiver cette classe ?"
+        message="Elle sera retiree des listes actives sans perdre son historique."
       />
     </div>
   );

@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 const connectToMongo = require("./Database/db");
 const express = require("express");
 const app = express();
@@ -28,6 +28,12 @@ app.use("/api/student", require("./routes/details/student-details.route"));
 
 app.use("/api/branch", require("./routes/branch.route"));
 app.use("/api/class", require("./routes/class.route"));
+app.use("/api/department", require("./routes/department.route"));
+app.use("/api/academic-year", require("./routes/academic-year.route"));
+app.use("/api/promotion", require("./routes/promotion.route"));
+app.use("/api/academic-fee", require("./routes/academic-fee.route"));
+app.use("/api/library", require("./routes/library.route"));
+app.use("/api/archive", require("./routes/archive.route"));
 app.use("/api/subject", require("./routes/subject.route"));
 app.use("/api/notice", require("./routes/notice.route"));
 app.use("/api/timetable", require("./routes/timetable.route"));
